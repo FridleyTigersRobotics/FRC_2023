@@ -13,18 +13,19 @@
 #include <frc/SPI.h>
 #include <frc/controller/PIDController.h>
 #include <frc/XboxController.h>
-
+#include <ctre/Phoenix.h>
+#include <frc/PneumaticsControlModule.h>
+#include <frc/DoubleSolenoid.h>
 /**
  * This is a demo program showing the use of the DifferentialDrive class.
  * Runs the motors with arcade steering.
- *///3-front right ~ 2-rear right ~  1-rear left ~ 0-front left
+*/
 class Robot : public frc::TimedRobot {
-  frc::PWMVictorSPX m_frontleftMotor{0};
-  frc::PWMVictorSPX m_rearleftMotor{1};
-  frc::PWMVictorSPX m_rearrightMotor{2};
-  frc::PWMVictorSPX m_frontrightMotor{3};
+  WPI_TalonSRX          m_frontleftMotor{1};
+  WPI_TalonSRX          m_rearleftMotor{2};
+  WPI_TalonSRX          m_rearrightMotor{3};
+  WPI_TalonSRX          m_frontrightMotor{4};
   
-
   frc::MotorControllerGroup m_leftMotors{ m_frontleftMotor, m_rearleftMotor };
   frc::MotorControllerGroup m_rightMotors{ m_frontrightMotor, m_rearrightMotor };
 
@@ -32,6 +33,10 @@ class Robot : public frc::TimedRobot {
   frc::XboxController m_stick{0};
   frc::Encoder m_leftencoder{0,1};
   frc::Encoder m_rightencoder{2,3};
+
+  frc::PneumaticsControlModule pcm{6};
+
+  frc::DoubleSolenoid m_clawSolenoid{ 6, frc::PneumaticsModuleType::CTREPCM, 0, 1 };
 
   AHRS m_imu{ frc::SPI::Port::kMXP }; /* Alternatives:  I2C.Port.kMXP or SerialPort.Port.kUSB */
 
@@ -78,7 +83,18 @@ class Robot : public frc::TimedRobot {
     m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
   }
   
-
+  if ( m_stick.GetBButton() )
+  {
+    m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
+  }
+  else if (m_stick.GetYButton())
+  {
+    m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
+  }
+  else
+  {
+    m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
+  }
 
 
  frc::SmartDashboard::PutNumber("Pitch", m_imu.GetPitch());
