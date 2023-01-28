@@ -25,18 +25,24 @@ class Robot : public frc::TimedRobot {
   WPI_TalonSRX          m_rearleftMotor{2};
   WPI_TalonSRX          m_rearrightMotor{3};
   WPI_TalonSRX          m_frontrightMotor{4};
-  
+  frc::Timer   m_autoTimer;
   frc::MotorControllerGroup m_leftMotors{ m_frontleftMotor, m_rearleftMotor };
   frc::MotorControllerGroup m_rightMotors{ m_frontrightMotor, m_rearrightMotor };
+  double               kRotateGyroP{ 0.01 };
+  double               kRotateGyroI{ 0.0000 };
+  double               kRotateGyroD{ 0.0 };
+frc2::PIDController  m_rotateGyroPid{ kRotateGyroP, kRotateGyroI, kRotateGyroD };
 
   frc::DifferentialDrive m_robotDrive{m_leftMotors, m_rightMotors};
   frc::XboxController m_stick{0};
   frc::Encoder m_leftencoder{0,1};
   frc::Encoder m_rightencoder{2,3};
 
-  frc::PneumaticsControlModule pcm{6};
+  int const kPcmCanId = 6;
 
-  frc::DoubleSolenoid m_clawSolenoid{ 6, frc::PneumaticsModuleType::CTREPCM, 0, 1 };
+  frc::PneumaticsControlModule pcm{kPcmCanId};
+
+  frc::DoubleSolenoid m_clawSolenoid{ kPcmCanId, frc::PneumaticsModuleType::CTREPCM, 0, 1 };
 
   AHRS m_imu{ frc::SPI::Port::kMXP }; /* Alternatives:  I2C.Port.kMXP or SerialPort.Port.kUSB */
 
@@ -46,6 +52,12 @@ class Robot : public frc::TimedRobot {
   frc::PIDController m_balancePid{ kBalanceP, kBalanceI, kBalanceD };
 
  public:
+
+  bool RotateDegrees( double angle );
+  bool DriveForTime( double speed, double time, double initialAngle );
+
+
+
   void RobotInit() override {
     // We need to invert one side of the drivetrain so that positive voltages
     // result in both sides moving forward. Depending on how your robot's
@@ -106,7 +118,69 @@ class Robot : public frc::TimedRobot {
   frc::SmartDashboard::PutNumber("angle", m_imu.GetAngle());
 
   }
+
+
+  void AutonomousInit() override {
+    m_imu.Reset();
+                m_autoTimer.Stop();
+            m_autoTimer.Reset();
+            m_autoTimer.Start();
+  }
+
+
+  void AutonomousPeriodic() override {
+    //RotateDegrees(90);
+    DriveForTime(0.5,0.5,0);
+  }
+
+
 };
+
+
+
+
+
+
+
+bool Robot::RotateDegrees( double angle )
+{
+  double rotationSpeed = m_rotateGyroPid.Calculate( m_imu.GetAngle(), angle );
+
+  if ( m_rotateGyroPid.AtSetpoint() )
+  {
+    //m_drive.DriveCartesian( 0.0, 0.0, 0.0 );
+  m_robotDrive.ArcadeDrive(0,0);
+    return true;
+  }
+  else
+  {
+    //m_drive.DriveCartesian( 0.0, 0.0, -rotationSpeed );
+     m_robotDrive.ArcadeDrive(0,-rotationSpeed);
+    return false;
+  }
+}
+
+bool Robot::DriveForTime( double speed, double time, double initialAngle )
+{
+  double rotationSpeed = m_rotateGyroPid.Calculate( m_imu.GetAngle(), initialAngle );
+
+  if (     m_autoTimer.Get() < (units::time::second_t)time )
+  {
+    
+     m_robotDrive.ArcadeDrive(speed,0);
+    return false;
+  }
+  else
+  {
+    m_robotDrive.ArcadeDrive(0,0);
+    return true;
+  }
+}
+
+
+
+
+
 
 #ifndef RUNNING_FRC_TESTS
 int main() {
