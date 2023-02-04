@@ -41,8 +41,8 @@ class Robot : public frc::TimedRobot {
 
 
   // Digial I/O
-  frc::Encoder m_leftencoder{0,1};
-  frc::Encoder m_rightencoder{2,3};
+  frc::Encoder m_leftencoder { 0, 1 };
+  frc::Encoder m_rightencoder{ 2, 3 };
 
 
   // SPI Devices
