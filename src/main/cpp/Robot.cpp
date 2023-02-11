@@ -16,6 +16,8 @@
 #include <ctre/Phoenix.h>
 #include <frc/PneumaticsControlModule.h>
 #include <frc/DoubleSolenoid.h>
+#include <ctre/phoenix/motorcontrol/can/WPI_VictorSPX.h>
+
 
 class Robot : public frc::TimedRobot {
 
@@ -29,12 +31,18 @@ class Robot : public frc::TimedRobot {
   int const kFRMotorCanId = 4;
   int const kPcmCanId     = 6;
 
+  int const kLinActACanId     = 8;
+  int const kLinActBCanId     = 9;
+  int const kLiftCanId        = 10;
+
   WPI_TalonSRX                 m_frontleftMotor { kFLMotorCanId };
   WPI_TalonSRX                 m_rearleftMotor  { kRLMotorCanId };
   WPI_TalonSRX                 m_rearrightMotor { kRRMotorCanId };
   WPI_TalonSRX                 m_frontrightMotor{ kFRMotorCanId };
   frc::PneumaticsControlModule m_pcm            { kPcmCanId };
-
+  WPI_VictorSPX                m_LinActA        { kLinActACanId };
+  WPI_VictorSPX                m_LinActB        { kLinActBCanId };
+  WPI_VictorSPX                m_Lift           { kLiftCanId };
 
   // Pneumatics
   frc::DoubleSolenoid m_clawSolenoid{ kPcmCanId, frc::PneumaticsModuleType::CTREPCM, 0, 1 };
@@ -106,7 +114,7 @@ class Robot : public frc::TimedRobot {
     double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
     frc::SmartDashboard::PutNumber("pidValue", pidValue);
 
-    if ( m_stick.GetAButton() )
+    /*if ( m_stick.GetAButton() )
     {
       frc::SmartDashboard::PutNumber("A Button", m_stick.GetAButton());
       m_robotDrive.ArcadeDrive(-pidValue, 0.0);
@@ -115,9 +123,9 @@ class Robot : public frc::TimedRobot {
     {
       frc::SmartDashboard::PutNumber("A Button",m_stick.GetAButton());
       m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
-    }
+    }*/
     
-    if ( m_stick.GetBButton() )
+    /*if ( m_stick.GetBButton() )
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
     }
@@ -128,7 +136,41 @@ class Robot : public frc::TimedRobot {
     else
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
+    }*/
+
+
+    if( m_stick.GetLeftBumper() )
+    {
+      m_LinActA.Set( 1.0 );
+      m_LinActB.Set( 1.0 );
     }
+    else if( m_stick.GetRightBumper() )  // passenger out
+    {
+      m_LinActA.Set( -1.0 );
+      m_LinActB.Set( -1.0 );
+    }
+    else
+    {
+      m_LinActA.Set( 0.0 );
+      m_LinActB.Set( 0.0 );
+    }
+
+
+    if ( m_stick.GetAButton() )
+    {
+      m_Lift.Set( 0.5 );
+    }
+    else if ( m_stick.GetBButton() )
+    {
+      m_Lift.Set( -0.5 );
+    }
+    else
+    {
+      m_Lift.Set( 0.0 );
+    }
+
+
+
   }
 
 
