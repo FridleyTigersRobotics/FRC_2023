@@ -66,8 +66,8 @@ class Robot : public frc::TimedRobot {
   frc2::PIDController m_rotateGyroPid{ kRotateGyroP, kRotateGyroI, kRotateGyroD };
 
   double kBalanceP{ 0.04 };
-  double kBalanceI{ 0.0 };
-  double kBalanceD{ 0.0 };
+  double kBalanceI{ 0.00 };
+  double kBalanceD{ 0.00 };
   frc::PIDController m_balancePid{ kBalanceP, kBalanceI, kBalanceD };
 
 
