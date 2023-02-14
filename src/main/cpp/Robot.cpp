@@ -8,6 +8,9 @@
 #include <frc/motorcontrol/PWMVictorSPX.h>
 #include <frc/motorcontrol/MotorControllerGroup.h>
 #include <frc/Encoder.h>
+#include <frc/AnalogInput.h>
+#include <frc/AnalogEncoder.h>
+#include <frc/DigitalInput.h>
 #include <frc/smartdashboard/SmartDashboard.h>
 #include <AHRS.h>
 #include <frc/SPI.h>
@@ -40,8 +43,8 @@ class Robot : public frc::TimedRobot {
   WPI_TalonSRX                 m_rearrightMotor { kRRMotorCanId };
   WPI_TalonSRX                 m_frontrightMotor{ kFRMotorCanId };
   frc::PneumaticsControlModule m_pcm            { kPcmCanId };
-  WPI_VictorSPX                m_LinActA        { kLinActACanId };
-  WPI_VictorSPX                m_LinActB        { kLinActBCanId };
+  WPI_VictorSPX                m_LinActRight    { kLinActACanId };
+  WPI_VictorSPX                m_LinActLeft     { kLinActBCanId };
   WPI_VictorSPX                m_Lift           { kLiftCanId };
 
   // Pneumatics
@@ -52,6 +55,16 @@ class Robot : public frc::TimedRobot {
   frc::Encoder m_leftencoder { 0, 1 };
   frc::Encoder m_rightencoder{ 2, 3 };
 
+  frc::DigitalInput m_bottomLimitLeft{ 4 };
+  frc::DigitalInput m_bottomLimitRight{ 5 };
+
+  // Analog I/O
+  frc::AnalogInput                            m_ajdA{ 0 };
+  frc::AnalogInput                            m_ajdB{ 1 };
+  frc::AnalogEncoder                          m_jdA{ m_ajdA };
+  frc::AnalogEncoder                          m_jdB{ m_ajdB };
+
+  double kDistPerRotation = 360;  //how far the nechanism travels in 1 rotation of the encoder in angular degrees
 
   // SPI Devices
   AHRS m_imu{ frc::SPI::Port::kMXP };
@@ -95,7 +108,23 @@ class Robot : public frc::TimedRobot {
     m_rightMotors.SetInverted(true);
     m_leftencoder.SetReverseDirection(true); 
     //m_imu.Calibrate();
+
+    m_jdA.SetDistancePerRotation( kDistPerRotation );
+    m_jdB.SetDistancePerRotation( kDistPerRotation );
   }
+
+  void RobotPeriodic() override {
+    frc::SmartDashboard::PutNumber("m_bottomLimitLeft",  m_bottomLimitLeft.Get() );
+    frc::SmartDashboard::PutNumber("m_bottomLimitRight", m_bottomLimitRight.Get());
+
+
+    frc::SmartDashboard::PutNumber("m_ajdA",  m_ajdA.GetValue());
+    frc::SmartDashboard::PutNumber("m_ajdB",  m_ajdB.GetValue());
+    frc::SmartDashboard::PutNumber("m_jdA",  m_jdA.GetDistance());
+    frc::SmartDashboard::PutNumber("m_jdB",  m_jdB.GetDistance());
+
+  }
+
 
   void TeleopInit() override {
     m_leftencoder.Reset();
@@ -108,11 +137,11 @@ class Robot : public frc::TimedRobot {
 
   void TeleopPeriodic() override {
     // Drive with arcade style
-    frc::SmartDashboard::PutNumber("Left Encoder", m_leftencoder.Get());   
-    frc::SmartDashboard::PutNumber("Right Encoder", m_rightencoder.Get());
+    //frc::SmartDashboard::PutNumber("Left Encoder", m_leftencoder.Get());   
+    //frc::SmartDashboard::PutNumber("Right Encoder", m_rightencoder.Get());
 
     double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
-    frc::SmartDashboard::PutNumber("pidValue", pidValue);
+    //frc::SmartDashboard::PutNumber("pidValue", pidValue);
 
     /*if ( m_stick.GetAButton() )
     {
@@ -124,6 +153,8 @@ class Robot : public frc::TimedRobot {
       frc::SmartDashboard::PutNumber("A Button",m_stick.GetAButton());
       m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
     }*/
+
+    m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
     
     /*if ( m_stick.GetBButton() )
     {
@@ -138,21 +169,38 @@ class Robot : public frc::TimedRobot {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
     }*/
 
+    m_LinActRight.Set( 0.0 );
+    m_LinActLeft.Set( 0.0 );
+
+
+
+
+
 
     if( m_stick.GetLeftBumper() )
     {
-      m_LinActA.Set( 1.0 );
-      m_LinActB.Set( 1.0 );
+      if ( m_bottomLimitLeft.Get() )
+      {
+        m_jdA.Reset();
+        m_LinActLeft.Set( 1.0 );
+      }
+
+      if ( m_bottomLimitRight.Get() )
+      {
+        m_jdA.Reset();
+        m_LinActRight.Set( 1.0 );
+      }
+
     }
     else if( m_stick.GetRightBumper() )  // passenger out
     {
-      m_LinActA.Set( -1.0 );
-      m_LinActB.Set( -1.0 );
+      m_LinActRight.Set( -1.0 );
+      m_LinActLeft.Set( -1.0 );
     }
     else
     {
-      m_LinActA.Set( 0.0 );
-      m_LinActB.Set( 0.0 );
+      m_LinActRight.Set( 0.0 );
+      m_LinActLeft.Set( 0.0 );
     }
 
 
