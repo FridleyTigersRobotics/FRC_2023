@@ -28,41 +28,48 @@ class Robot : public frc::TimedRobot {
   // None yet.
 
   // CAN Devices
-  int const kFLMotorCanId = 1;
-  int const kRLMotorCanId = 2;
-  int const kRRMotorCanId = 3;
-  int const kFRMotorCanId = 4;
-  int const kPcmCanId     = 6;
-
-  int const kLinActACanId     = 8;
-  int const kLinActBCanId     = 9;
-  int const kLiftCanId        = 10;
+  int const kFLMotorCanId  = 1;
+  int const kRLMotorCanId  = 2;
+  int const kRRMotorCanId  = 3;
+  int const kFRMotorCanId  = 4;
+  int const kPcmCanId      = 6;
+  int const kLinActACanId  = 8;
+  int const kLinActBCanId  = 9;
+  int const kLiftCanId     = 10;
 
   WPI_TalonSRX                 m_frontleftMotor { kFLMotorCanId };
   WPI_TalonSRX                 m_rearleftMotor  { kRLMotorCanId };
   WPI_TalonSRX                 m_rearrightMotor { kRRMotorCanId };
   WPI_TalonSRX                 m_frontrightMotor{ kFRMotorCanId };
-  frc::PneumaticsControlModule m_pcm            { kPcmCanId };
+  frc::PneumaticsControlModule m_pcm            { kPcmCanId     };
   WPI_VictorSPX                m_LinActRight    { kLinActACanId };
   WPI_VictorSPX                m_LinActLeft     { kLinActBCanId };
-  WPI_VictorSPX                m_Lift           { kLiftCanId };
+  WPI_VictorSPX                m_Lift           { kLiftCanId    };
+
 
   // Pneumatics
   frc::DoubleSolenoid m_clawSolenoid{ kPcmCanId, frc::PneumaticsModuleType::CTREPCM, 0, 1 };
+  frc::DoubleSolenoid m_liftSolenoid{ kPcmCanId, frc::PneumaticsModuleType::CTREPCM, 2, 3 };
 
 
   // Digial I/O
-  frc::Encoder m_leftencoder { 0, 1 };
-  frc::Encoder m_rightencoder{ 2, 3 };
-
-  frc::DigitalInput m_bottomLimitLeft{ 4 };
+  frc::Encoder      m_leftencoder     { 0, 1 };
+  frc::Encoder      m_rightencoder    { 2, 3 };
+  frc::DigitalInput m_bottomLimitLeft { 4 };
   frc::DigitalInput m_bottomLimitRight{ 5 };
+  frc::Encoder      m_liftEncoder     { 6, 7 };
+
 
   // Analog I/O
-  frc::AnalogInput                            m_ajdA{ 0 };
-  frc::AnalogInput                            m_ajdB{ 1 };
-  frc::AnalogEncoder                          m_jdA{ m_ajdA };
-  frc::AnalogEncoder                          m_jdB{ m_ajdB };
+  frc::AnalogInput    m_angleIntputA{ 0 };
+  frc::AnalogInput    m_angleIntputB{ 1 };
+  frc::AnalogEncoder  m_angleEncoderA{ m_angleIntputA };
+  frc::AnalogEncoder  m_angleEncoderB{ m_angleIntputB };
+  frc::AnalogInput    m_clawIntputA{ 2 };
+  frc::AnalogInput    m_clawIntputB{ 3 };
+  frc::AnalogEncoder  m_clawEncoderA{ m_clawIntputA };
+  frc::AnalogEncoder  m_clawEncoderB{ m_clawIntputB };
+
 
   double kDistPerRotation = 360;  //how far the nechanism travels in 1 rotation of the encoder in angular degrees
 
@@ -98,6 +105,26 @@ class Robot : public frc::TimedRobot {
 
 
 
+  enum lift_state_e
+  {
+    LIFT_STATE_HOLD,
+    LIFT_STATE_RAISE,
+    LIFT_STATE_LOWER
+  } m_liftState = LIFT_STATE_HOLD;
+
+
+  enum lift_state_e
+  {
+    ANGLE_STATE_HOLD,
+    ANGLE_STATE_RAISE,
+    ANGLE_STATE_LOWER
+  } m_angleState = ANGLE_STATE_HOLD;
+
+
+
+
+
+
 
  public:
 
@@ -109,20 +136,21 @@ class Robot : public frc::TimedRobot {
     m_leftencoder.SetReverseDirection(true); 
     //m_imu.Calibrate();
 
-    m_jdA.SetDistancePerRotation( kDistPerRotation );
-    m_jdB.SetDistancePerRotation( kDistPerRotation );
+    m_angleEncoderA.SetDistancePerRotation( kDistPerRotation );
+    m_angleEncoderB.SetDistancePerRotation( kDistPerRotation );
   }
 
   void RobotPeriodic() override {
+    //frc::SmartDashboard::PutNumber("Left Encoder", m_leftencoder.Get());   
+    //frc::SmartDashboard::PutNumber("Right Encoder", m_rightencoder.Get());
+
     frc::SmartDashboard::PutNumber("m_bottomLimitLeft",  m_bottomLimitLeft.Get() );
     frc::SmartDashboard::PutNumber("m_bottomLimitRight", m_bottomLimitRight.Get());
 
-
-    frc::SmartDashboard::PutNumber("m_ajdA",  m_ajdA.GetValue());
-    frc::SmartDashboard::PutNumber("m_ajdB",  m_ajdB.GetValue());
-    frc::SmartDashboard::PutNumber("m_jdA",  m_jdA.GetDistance());
-    frc::SmartDashboard::PutNumber("m_jdB",  m_jdB.GetDistance());
-
+    frc::SmartDashboard::PutNumber("m_angleIntputA",  m_angleIntputA.GetValue());
+    frc::SmartDashboard::PutNumber("m_angleIntputB",  m_angleIntputB.GetValue());
+    frc::SmartDashboard::PutNumber("m_angleEncoderA", m_angleEncoderA.GetDistance());
+    frc::SmartDashboard::PutNumber("m_angleEncoderB", m_angleEncoderB.GetDistance());
   }
 
 
@@ -136,10 +164,6 @@ class Robot : public frc::TimedRobot {
 
 
   void TeleopPeriodic() override {
-    // Drive with arcade style
-    //frc::SmartDashboard::PutNumber("Left Encoder", m_leftencoder.Get());   
-    //frc::SmartDashboard::PutNumber("Right Encoder", m_rightencoder.Get());
-
     double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
     //frc::SmartDashboard::PutNumber("pidValue", pidValue);
 
@@ -181,13 +205,13 @@ class Robot : public frc::TimedRobot {
     {
       if ( m_bottomLimitLeft.Get() )
       {
-        m_jdA.Reset();
+        m_angleEncoderA.Reset();
         m_LinActLeft.Set( 1.0 );
       }
 
       if ( m_bottomLimitRight.Get() )
       {
-        m_jdA.Reset();
+        m_angleEncoderA.Reset();
         m_LinActRight.Set( 1.0 );
       }
 
@@ -242,13 +266,11 @@ class Robot : public frc::TimedRobot {
 
     if ( m_rotateGyroPid.AtSetpoint() )
     {
-      //m_drive.DriveCartesian( 0.0, 0.0, 0.0 );
       m_robotDrive.ArcadeDrive(0,0);
       return true;
     }
     else
     {
-      //m_drive.DriveCartesian( 0.0, 0.0, -rotationSpeed );
       m_robotDrive.ArcadeDrive(0,-rotationSpeed);
       return false;
     }
