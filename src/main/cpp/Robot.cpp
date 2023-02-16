@@ -104,7 +104,7 @@ class Robot : public frc::TimedRobot {
 
 
 
-
+/*
   enum lift_state_e
   {
     LIFT_STATE_HOLD,
@@ -120,7 +120,7 @@ class Robot : public frc::TimedRobot {
     ANGLE_STATE_LOWER
   } m_angleState = ANGLE_STATE_HOLD;
 
-
+*/
 
 
 
@@ -151,6 +151,12 @@ class Robot : public frc::TimedRobot {
     frc::SmartDashboard::PutNumber("m_angleIntputB",  m_angleIntputB.GetValue());
     frc::SmartDashboard::PutNumber("m_angleEncoderA", m_angleEncoderA.GetDistance());
     frc::SmartDashboard::PutNumber("m_angleEncoderB", m_angleEncoderB.GetDistance());
+
+    frc::SmartDashboard::PutNumber("m_clawIntputA",  m_clawIntputA.GetValue());
+    frc::SmartDashboard::PutNumber("m_clawIntputB",  m_clawIntputB.GetValue());
+    frc::SmartDashboard::PutNumber("m_clawEncoderA", m_clawEncoderA.GetDistance());
+    frc::SmartDashboard::PutNumber("m_clawEncoderB", m_clawEncoderB.GetDistance());
+
   }
 
 
