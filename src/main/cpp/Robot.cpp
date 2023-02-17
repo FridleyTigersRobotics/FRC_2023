@@ -125,7 +125,8 @@ class Robot : public frc::TimedRobot {
   frc::Encoder      m_rightencoder    { 2, 3 };
   frc::DigitalInput m_bottomLimitLeft { 4 };
   frc::DigitalInput m_bottomLimitRight{ 5 };
-  frc::Encoder      m_liftEncoder     { 6, 7 };
+  frc::DigitalInput m_liftLimitTop    { 6 };
+  frc::DigitalInput m_liftLimitBot    { 7 };
 
 
   // Analog I/O
@@ -163,6 +164,7 @@ class Robot : public frc::TimedRobot {
   frc::Timer m_autoTimer;
 
 
+
   const std::string    kAutoNameDefault = "Default";
   const std::string    kAutoDrive       = "Drive";
   frc::SendableChooser<std::string> m_autoChooser;
@@ -176,6 +178,7 @@ class Robot : public frc::TimedRobot {
     LIFT_STATE_RAISE,
     LIFT_STATE_LOWER
   } m_liftState = LIFT_STATE_HOLD;
+  
 
 
   enum angle_state_e
@@ -245,6 +248,8 @@ class Robot : public frc::TimedRobot {
     bool AngleUpL    = m_stick.GetLeftBumper();
     bool AngleDownR  = m_stick.GetRightTriggerAxis() > 0.5;
     bool AngleDownL  = m_stick.GetLeftTriggerAxis() > 0.5;
+    bool LiftUp      = m_stick.GetYButton();
+    bool LiftDown    = m_stick.GetXButton();
 
     m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
 
@@ -274,7 +279,18 @@ class Robot : public frc::TimedRobot {
       m_LinActRight.Set( 0.0 );
     }
 
-
+    if ( LiftUp )
+    {
+      m_Lift.Set( 0.5 );
+    }
+    else if ( LiftDown )
+    {
+      m_Lift.Set( -0.5 );
+    }
+    else
+    {
+      m_Lift.Set( 0.0 );
+    }
   }
 
 
@@ -292,14 +308,14 @@ class Robot : public frc::TimedRobot {
 
 
   void TeleopPeriodic() override {
-    bool SelfBalanceEnable = m_stick.GetAButton();
-    bool ToggleClaw        = m_stick.GetBButton();
+    bool SelfBalanceEnable = m_stick.GetYButton();
+    bool ToggleClaw        = m_stick.GetXButton();
 
-    bool LiftUp            = m_stick.GetRightBumper();
-    bool LiftDown          = m_stick.GetLeftBumper();
+    bool LiftUp            = m_stick.GetYButtonPressed();
+    bool LiftDown          = m_stick.GetXButtonPressed();
 
-    bool AngleUp           = m_stick.GetRightTriggerAxis() > 0.5;
-    bool AngleDown         = m_stick.GetLeftTriggerAxis() > 0.5;
+    bool AngleUp           = m_stick.GetRightBumperPressed();
+    bool AngleDown         = m_stick.GetLeftBumperPressed();
 
 
     // ------------------------------------------------------------------------
@@ -348,53 +364,83 @@ class Robot : public frc::TimedRobot {
     // ------------------------------------------------------------------------
     //  ANGLE CONTROL
     // ------------------------------------------------------------------------
-    m_LinActRight.Set( 0.0 );
-    m_LinActLeft.Set( 0.0 );
+    double linActRightValue = 0.0;
+    double linActLeftValue  = 0.0;
 
     if( AngleDown )
     {
       if ( m_bottomLimitLeft.Get() )
       {
         m_angleEncoder.Reset();
-        m_LinActLeft.Set( 1.0 );
+        linActLeftValue = 1.0;
       }
 
       if ( m_bottomLimitRight.Get() )
       {
         m_angleEncoder.Reset();
-        m_LinActRight.Set( 1.0 );
+        linActRightValue = 1.0;
       }
-
     }
     else if( AngleUp )
     {
-      m_LinActRight.Set( -1.0 );
-      m_LinActLeft.Set( -1.0 );
+      linActRightValue = -1.0;
+      linActLeftValue  = -1.0;
     }
-    else
-    {
-      m_LinActRight.Set( 0.0 );
-      m_LinActLeft.Set( 0.0 );
-    }
+
+    m_LinActRight.Set( linActRightValue );
+    m_LinActLeft.Set( linActLeftValue );
 
 
     // ------------------------------------------------------------------------
     //  LIFT CONTROL
     // ------------------------------------------------------------------------
+    double liftMotorValue = 0.0;
+
     if ( LiftUp )
     {
-      m_Lift.Set( 0.5 );
+      m_liftState = LIFT_STATE_RAISE;
     }
     else if ( LiftDown )
     {
-      m_Lift.Set( -0.5 );
+      m_liftState = LIFT_STATE_LOWER;
     }
-    else
+
+    switch ( m_liftState )
     {
-      m_Lift.Set( 0.0 );
+      case LIFT_STATE_RAISE:
+      {
+        if ( m_liftLimitTop.Get() )
+        {
+          m_liftState = LIFT_STATE_HOLD;
+        }
+        else
+        {
+          liftMotorValue = 0.5;
+        }
+        break;
+      }
+
+      case LIFT_STATE_LOWER:
+      {
+        if ( m_liftLimitBot.Get() )
+        {
+          m_liftState = LIFT_STATE_HOLD;
+        }
+        else
+        {
+          liftMotorValue = -0.5;
+        }
+        break;
+      }
+
+      default:
+      case LIFT_STATE_HOLD:
+      {
+        liftMotorValue = 0;
+        break;
+      }
     }
-
-
+    m_Lift.Set( liftMotorValue );
 
   }
 
