@@ -12,6 +12,7 @@
 #include <frc/AnalogEncoder.h>
 #include <frc/DigitalInput.h>
 #include <frc/smartdashboard/SmartDashboard.h>
+#include <frc/smartdashboard/SendableChooser.h>
 #include <AHRS.h>
 #include <frc/SPI.h>
 #include <frc/controller/PIDController.h>
@@ -20,6 +21,7 @@
 #include <frc/PneumaticsControlModule.h>
 #include <frc/DoubleSolenoid.h>
 #include <ctre/phoenix/motorcontrol/can/WPI_VictorSPX.h>
+
 
 
 class Robot : public frc::TimedRobot {
@@ -103,8 +105,13 @@ class Robot : public frc::TimedRobot {
   frc::Timer m_autoTimer;
 
 
+  const std::string    kAutoNameDefault = "Default";
+  const std::string    kAutoDrive       = "Drive";
+  frc::SendableChooser<std::string> m_autoChooser;
 
-/*
+
+
+
   enum lift_state_e
   {
     LIFT_STATE_HOLD,
@@ -113,14 +120,23 @@ class Robot : public frc::TimedRobot {
   } m_liftState = LIFT_STATE_HOLD;
 
 
-  enum lift_state_e
+  enum angle_state_e
   {
     ANGLE_STATE_HOLD,
     ANGLE_STATE_RAISE,
     ANGLE_STATE_LOWER
   } m_angleState = ANGLE_STATE_HOLD;
 
-*/
+
+  enum claw_state_e
+  {
+    CLAW_STATE_HOLD,
+    CLAW_STATE_OPEN,
+    CLAW_STATE_CLOSE
+  } m_clawState = CLAW_STATE_HOLD;
+
+
+
 
 
 
@@ -138,6 +154,16 @@ class Robot : public frc::TimedRobot {
 
     m_angleEncoderA.SetDistancePerRotation( kDistPerRotation );
     m_angleEncoderB.SetDistancePerRotation( kDistPerRotation );
+
+
+    // Autonomous Chooser
+    m_autoChooser.SetDefaultOption( kAutoNameDefault, kAutoNameDefault );
+    m_autoChooser.AddOption       ( kAutoDrive,       kAutoDrive       );
+
+    frc::SmartDashboard::PutData("Auto Modes", &m_autoChooser);
+
+
+
   }
 
   void RobotPeriodic() override {
@@ -170,44 +196,66 @@ class Robot : public frc::TimedRobot {
 
 
   void TeleopPeriodic() override {
-    double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
-    //frc::SmartDashboard::PutNumber("pidValue", pidValue);
+    bool SelfBalanceEnable = m_stick.GetAButton();
+    bool ToggleClaw        = m_stick.GetBButton();
 
-    /*if ( m_stick.GetAButton() )
+    bool LiftUp            = m_stick.GetRightBumper();
+    bool LiftDown          = m_stick.GetLeftBumper();
+
+    bool AngleUp           = m_stick.GetRightTriggerAxis() > 0.5;
+    bool AngleDown         = m_stick.GetLeftTriggerAxis() > 0.5;
+
+
+    // ------------------------------------------------------------------------
+    //  DRIVE CONTROL
+    // ------------------------------------------------------------------------
+    if ( SelfBalanceEnable )
     {
-      frc::SmartDashboard::PutNumber("A Button", m_stick.GetAButton());
+      double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
       m_robotDrive.ArcadeDrive(-pidValue, 0.0);
     }
     else
     {
-      frc::SmartDashboard::PutNumber("A Button",m_stick.GetAButton());
       m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
-    }*/
+    }
 
-    m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
-    
-    /*if ( m_stick.GetBButton() )
+
+    // ------------------------------------------------------------------------
+    //  CLAW CONTROL
+    // ------------------------------------------------------------------------
+    if ( ToggleClaw )
+    {
+      if ( m_clawState == CLAW_STATE_OPEN )
+      {
+        m_clawState = CLAW_STATE_CLOSE;
+      }
+      else
+      {
+        m_clawState = CLAW_STATE_OPEN;
+      }
+    }
+
+    if ( m_clawState == CLAW_STATE_OPEN )
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
     }
-    else if (m_stick.GetYButton())
+    else if ( m_clawState == CLAW_STATE_CLOSE )
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
     }
     else
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
-    }*/
+    }
 
+
+    // ------------------------------------------------------------------------
+    //  ANGLE CONTROL
+    // ------------------------------------------------------------------------
     m_LinActRight.Set( 0.0 );
     m_LinActLeft.Set( 0.0 );
 
-
-
-
-
-
-    if( m_stick.GetLeftBumper() )
+    if( AngleDown )
     {
       if ( m_bottomLimitLeft.Get() )
       {
@@ -222,7 +270,7 @@ class Robot : public frc::TimedRobot {
       }
 
     }
-    else if( m_stick.GetRightBumper() )  // passenger out
+    else if( AngleUp )
     {
       m_LinActRight.Set( -1.0 );
       m_LinActLeft.Set( -1.0 );
@@ -234,11 +282,14 @@ class Robot : public frc::TimedRobot {
     }
 
 
-    if ( m_stick.GetAButton() )
+    // ------------------------------------------------------------------------
+    //  LIFT CONTROL
+    // ------------------------------------------------------------------------
+    if ( LiftUp )
     {
       m_Lift.Set( 0.5 );
     }
-    else if ( m_stick.GetBButton() )
+    else if ( LiftDown )
     {
       m_Lift.Set( -0.5 );
     }
@@ -285,8 +336,6 @@ class Robot : public frc::TimedRobot {
 
   bool DriveForTime( double speed, double time, double initialAngle )
   {
-    double rotationSpeed = m_rotateGyroPid.Calculate( m_imu.GetAngle(), initialAngle );
-
     if ( m_autoTimer.Get() < (units::time::second_t)time )
     {
       m_robotDrive.ArcadeDrive(speed,0);
