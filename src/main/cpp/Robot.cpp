@@ -221,18 +221,68 @@ class Robot : public frc::TimedRobot {
     m_angleEncoder.Update();
     m_clawEncoder.Update();
 
-    //frc::SmartDashboard::PutNumber("Left Encoder", m_leftencoder.Get());   
-    //frc::SmartDashboard::PutNumber("Right Encoder", m_rightencoder.Get());
-
-    frc::SmartDashboard::PutNumber("m_bottomLimitLeft",  m_bottomLimitLeft.Get() );
+    frc::SmartDashboard::PutNumber("m_leftencoder",      m_leftencoder.Get());   
+    frc::SmartDashboard::PutNumber("m_rightencoder",     m_rightencoder.Get());
+    frc::SmartDashboard::PutNumber("m_bottomLimitLeft",  m_bottomLimitLeft.Get());
     frc::SmartDashboard::PutNumber("m_bottomLimitRight", m_bottomLimitRight.Get());
-
-    frc::SmartDashboard::PutNumber("m_angleEncoder",  m_angleEncoder.GetValue());
-    frc::SmartDashboard::PutNumber("m_clawEncoder",   m_clawEncoder.GetValue());
+    frc::SmartDashboard::PutNumber("m_angleEncoder",     m_angleEncoder.GetValue());
+    frc::SmartDashboard::PutNumber("m_clawEncoder",      m_clawEncoder.GetValue());
   }
 
 
+  void TestInit() override {
+    m_angleEncoder.Reset();
+    m_clawEncoder.Update();
+    m_leftencoder.Reset();
+    m_rightencoder.Reset();
+    m_balancePid.Reset();
+    m_balancePid.SetSetpoint( 0.0 );
+  }
+
+
+  void TestPeriodic() override {
+    bool AngleUpR    = m_stick.GetRightBumper();
+    bool AngleUpL    = m_stick.GetLeftBumper();
+    bool AngleDownR  = m_stick.GetRightTriggerAxis() > 0.5;
+    bool AngleDownL  = m_stick.GetLeftTriggerAxis() > 0.5;
+
+    m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
+
+    if( AngleDownL )
+    {
+      m_LinActLeft.Set( 1.0 );
+    }
+    else if( AngleUpL )
+    {
+      m_LinActLeft.Set( -1.0 );
+    }
+    else
+    {
+      m_LinActLeft.Set( 0.0 );
+    }
+
+    if( AngleDownR )
+    {
+      m_LinActRight.Set( 1.0 );
+    }
+    else if( AngleUpR )
+    {
+      m_LinActRight.Set( -1.0 );
+    }
+    else
+    {
+      m_LinActRight.Set( 0.0 );
+    }
+
+
+  }
+
+
+
+
   void TeleopInit() override {
+    m_angleEncoder.Reset();
+    m_clawEncoder.Update();
     m_leftencoder.Reset();
     m_rightencoder.Reset();
     m_balancePid.Reset();
