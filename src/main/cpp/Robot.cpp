@@ -22,6 +22,72 @@
 #include <frc/DoubleSolenoid.h>
 #include <ctre/phoenix/motorcontrol/can/WPI_VictorSPX.h>
 
+class DualChannelAnalogEncoder {
+  public:
+    DualChannelAnalogEncoder( 
+      int channelA, 
+      int channelB, 
+      int minValidValue = 500,
+      int maxValidValue = 3000 
+      ) :
+      m_inputA{channelA},
+      m_inputB{channelB}
+    {
+      m_value         = 0;
+      m_prevValueA    = m_inputA.GetValue();
+      m_prevValueB    = m_inputB.GetValue();
+      m_minValidValue = minValidValue;
+      m_maxValidValue = maxValidValue;
+    }
+
+    void Reset()
+    {
+      m_value = 0;
+    }
+
+    int GetValue()
+    {
+      return m_value;
+    }
+
+    void Update()
+    {
+      int valueA = m_inputA.GetValue();
+      int valueB = m_inputB.GetValue();
+
+      if ( valueA       > m_minValidValue && valueA       < m_maxValidValue &&
+           m_prevValueA > m_minValidValue && m_prevValueA < m_maxValidValue )
+      {
+        m_value += valueA - m_prevValueA;
+      }
+      else if ( valueB       > m_minValidValue && valueB       < m_maxValidValue &&
+                m_prevValueB > m_minValidValue && m_prevValueB < m_maxValidValue )
+      {
+        m_value += valueB - m_prevValueB;
+      }
+      else
+      {
+        m_errorCount++;
+      }
+      m_prevValueA = valueA;
+      m_prevValueB = valueB;
+    }
+
+  private:
+    frc::AnalogInput  m_inputA;
+    frc::AnalogInput  m_inputB;
+    int               m_prevValueA;
+    int               m_prevValueB;
+    int               m_value;
+    int               m_minValidValue;
+    int               m_maxValidValue;
+    int               m_errorCount;
+};
+
+
+
+
+
 
 
 class Robot : public frc::TimedRobot {
@@ -63,17 +129,9 @@ class Robot : public frc::TimedRobot {
 
 
   // Analog I/O
-  frc::AnalogInput    m_angleIntputA{ 0 };
-  frc::AnalogInput    m_angleIntputB{ 1 };
-  frc::AnalogEncoder  m_angleEncoderA{ m_angleIntputA };
-  frc::AnalogEncoder  m_angleEncoderB{ m_angleIntputB };
-  frc::AnalogInput    m_clawIntputA{ 2 };
-  frc::AnalogInput    m_clawIntputB{ 3 };
-  frc::AnalogEncoder  m_clawEncoderA{ m_clawIntputA };
-  frc::AnalogEncoder  m_clawEncoderB{ m_clawIntputB };
+  DualChannelAnalogEncoder m_angleEncoder{ 0, 1 };
+  DualChannelAnalogEncoder m_clawEncoder { 2, 3 };
 
-
-  double kDistPerRotation = 360;  //how far the nechanism travels in 1 rotation of the encoder in angular degrees
 
   // SPI Devices
   AHRS m_imu{ frc::SPI::Port::kMXP };
@@ -84,9 +142,9 @@ class Robot : public frc::TimedRobot {
 
 
   // Drive System
-  frc::MotorControllerGroup m_leftMotors { m_frontleftMotor, m_rearleftMotor };
+  frc::MotorControllerGroup m_leftMotors { m_frontleftMotor,  m_rearleftMotor  };
   frc::MotorControllerGroup m_rightMotors{ m_frontrightMotor, m_rearrightMotor };
-  frc::DifferentialDrive    m_robotDrive { m_leftMotors, m_rightMotors };
+  frc::DifferentialDrive    m_robotDrive { m_leftMotors,      m_rightMotors    };
 
 
   // PIDs
@@ -152,37 +210,25 @@ class Robot : public frc::TimedRobot {
     m_leftencoder.SetReverseDirection(true); 
     //m_imu.Calibrate();
 
-    m_angleEncoderA.SetDistancePerRotation( kDistPerRotation );
-    m_angleEncoderB.SetDistancePerRotation( kDistPerRotation );
-
-
     // Autonomous Chooser
     m_autoChooser.SetDefaultOption( kAutoNameDefault, kAutoNameDefault );
     m_autoChooser.AddOption       ( kAutoDrive,       kAutoDrive       );
 
     frc::SmartDashboard::PutData("Auto Modes", &m_autoChooser);
-
-
-
   }
 
   void RobotPeriodic() override {
+    m_angleEncoder.Update();
+    m_clawEncoder.Update();
+
     //frc::SmartDashboard::PutNumber("Left Encoder", m_leftencoder.Get());   
     //frc::SmartDashboard::PutNumber("Right Encoder", m_rightencoder.Get());
 
     frc::SmartDashboard::PutNumber("m_bottomLimitLeft",  m_bottomLimitLeft.Get() );
     frc::SmartDashboard::PutNumber("m_bottomLimitRight", m_bottomLimitRight.Get());
 
-    frc::SmartDashboard::PutNumber("m_angleIntputA",  m_angleIntputA.GetValue());
-    frc::SmartDashboard::PutNumber("m_angleIntputB",  m_angleIntputB.GetValue());
-    frc::SmartDashboard::PutNumber("m_angleEncoderA", m_angleEncoderA.GetDistance());
-    frc::SmartDashboard::PutNumber("m_angleEncoderB", m_angleEncoderB.GetDistance());
-
-    frc::SmartDashboard::PutNumber("m_clawIntputA",  m_clawIntputA.GetValue());
-    frc::SmartDashboard::PutNumber("m_clawIntputB",  m_clawIntputB.GetValue());
-    frc::SmartDashboard::PutNumber("m_clawEncoderA", m_clawEncoderA.GetDistance());
-    frc::SmartDashboard::PutNumber("m_clawEncoderB", m_clawEncoderB.GetDistance());
-
+    frc::SmartDashboard::PutNumber("m_angleEncoder",  m_angleEncoder.GetValue());
+    frc::SmartDashboard::PutNumber("m_clawEncoder",   m_clawEncoder.GetValue());
   }
 
 
@@ -259,13 +305,13 @@ class Robot : public frc::TimedRobot {
     {
       if ( m_bottomLimitLeft.Get() )
       {
-        m_angleEncoderA.Reset();
+        m_angleEncoder.Reset();
         m_LinActLeft.Set( 1.0 );
       }
 
       if ( m_bottomLimitRight.Get() )
       {
-        m_angleEncoderA.Reset();
+        m_angleEncoder.Reset();
         m_LinActRight.Set( 1.0 );
       }
 
