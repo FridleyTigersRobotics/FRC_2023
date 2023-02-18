@@ -54,7 +54,8 @@ class DualChannelAnalogEncoder {
     {
       int valueA = m_inputA.GetValue();
       int valueB = m_inputB.GetValue();
-
+      frc::SmartDashboard::PutNumber("encoderA",    valueA);
+      frc::SmartDashboard::PutNumber("encoderB",    valueB);
       if ( valueA       > m_minValidValue && valueA       < m_maxValidValue &&
            m_prevValueA > m_minValidValue && m_prevValueA < m_maxValidValue )
       {
@@ -222,7 +223,7 @@ class Robot : public frc::TimedRobot {
 
   void RobotPeriodic() override {
     m_angleEncoder.Update();
-    m_clawEncoder.Update();
+    //m_clawEncoder.Update();
 
     frc::SmartDashboard::PutNumber("m_leftencoder",      m_leftencoder.Get());   
     frc::SmartDashboard::PutNumber("m_rightencoder",     m_rightencoder.Get());
@@ -230,6 +231,8 @@ class Robot : public frc::TimedRobot {
     frc::SmartDashboard::PutNumber("m_bottomLimitRight", m_bottomLimitRight.Get());
     frc::SmartDashboard::PutNumber("m_angleEncoder",     m_angleEncoder.GetValue());
     frc::SmartDashboard::PutNumber("m_clawEncoder",      m_clawEncoder.GetValue());
+
+
   }
 
 
@@ -246,12 +249,12 @@ class Robot : public frc::TimedRobot {
   void TestPeriodic() override {
     bool AngleUpR    = m_stick.GetRightBumper();
     bool AngleUpL    = m_stick.GetLeftBumper();
-    bool AngleDownR  = m_stick.GetRightTriggerAxis() > 0.5;
-    bool AngleDownL  = m_stick.GetLeftTriggerAxis() > 0.5;
-    bool LiftUp      = m_stick.GetYButton();
-    bool LiftDown    = m_stick.GetXButton();
+    bool AngleDownR  = m_stick.GetYButton();
+    bool AngleDownL  = m_stick.GetXButton();
+    bool LiftUp      = m_stick.GetAButton();
+    bool LiftDown    = m_stick.GetBButton();
 
-    m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
+    //m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
 
     if( AngleDownL )
     {
@@ -309,13 +312,13 @@ class Robot : public frc::TimedRobot {
 
   void TeleopPeriodic() override {
     bool SelfBalanceEnable = m_stick.GetYButton();
-    bool ToggleClaw        = m_stick.GetXButton();
+    bool ToggleClaw        = m_stick.GetXButtonPressed();
 
-    bool LiftUp            = m_stick.GetYButtonPressed();
-    bool LiftDown          = m_stick.GetXButtonPressed();
+    bool LiftUp            = false;//m_stick.GetYButtonPressed();
+    bool LiftDown          = false;//m_stick.GetXButtonPressed();
 
-    bool AngleUp           = m_stick.GetRightBumperPressed();
-    bool AngleDown         = m_stick.GetLeftBumperPressed();
+    bool AngleUp           = m_stick.GetRightBumper();
+    bool AngleDown         = m_stick.GetLeftBumper();
 
 
     // ------------------------------------------------------------------------
@@ -383,9 +386,18 @@ class Robot : public frc::TimedRobot {
     }
     else if( AngleUp )
     {
-      linActRightValue = -1.0;
-      linActLeftValue  = -1.0;
+      if ( m_angleEncoder.GetValue() > -1200 )
+      {
+        linActRightValue = -1.0;
+        linActLeftValue  = -1.0;
+      }
     }
+
+    frc::SmartDashboard::PutNumber("AngleDown",      AngleDown);
+    frc::SmartDashboard::PutNumber("AngleUp",      AngleUp);
+    frc::SmartDashboard::PutNumber("linActRightValue",      linActRightValue);
+    frc::SmartDashboard::PutNumber("linActLeftValue",      linActLeftValue);
+
 
     m_LinActRight.Set( linActRightValue );
     m_LinActLeft.Set( linActLeftValue );
