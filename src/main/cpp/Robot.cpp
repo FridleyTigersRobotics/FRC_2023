@@ -143,7 +143,7 @@ class Robot : public frc::TimedRobot {
 
   // User Input Devices
   frc::XboxController m_stick{0};
-
+  frc::XboxController m_logitechController{1};
 
   // Drive System
   frc::MotorControllerGroup m_leftMotors { m_frontleftMotor,  m_rearleftMotor  };
@@ -178,7 +178,7 @@ class Robot : public frc::TimedRobot {
   const std::string    kAutoDrive       = "Drive";
   frc::SendableChooser<std::string> m_autoChooser;
 
-
+  bool m_LiftLimitsSet = false;
 
 
   enum lift_state_e
@@ -204,6 +204,14 @@ class Robot : public frc::TimedRobot {
     CLAW_STATE_OPEN,
     CLAW_STATE_CLOSE
   } m_clawState = CLAW_STATE_HOLD;
+
+
+    enum lift2_state_e
+  {
+    LIFT2_STATE_HOLD,
+    LIFT2_STATE_OPEN,
+    LIFT2_STATE_CLOSE
+  } m_lift2State = LIFT2_STATE_HOLD;
 
 
 
@@ -316,28 +324,32 @@ class Robot : public frc::TimedRobot {
     m_balancePid.Reset();
     m_balancePid.SetSetpoint( 0.0 );
     m_ClawRotatePid.Reset();
+    m_LiftLimitsSet = false;
   }
 
 
 
   void TeleopPeriodic() override {
     bool SelfBalanceEnable = false;//m_stick.GetYButton();
-    bool ToggleClaw        = false;//m_stick.GetXButtonPressed();
+    bool ToggleClaw        = m_stick.GetXButtonPressed();
+    bool ToggleLift2       = m_stick.GetYButtonPressed();
 
-    bool LiftUp            = false;//m_stick.GetYButtonPressed();
-    bool LiftDown          = false;//m_stick.GetXButtonPressed();
 
-    bool Lift2Up            = m_stick.GetYButtonPressed();
-    bool Lift2Down          = m_stick.GetXButtonPressed();
+    bool LiftUp            = m_stick.GetAButton();
+    bool LiftDown          = m_stick.GetBButton();
 
-    bool ClawOpen           = m_stick.GetAButtonPressed();
-    bool ClawClose          = m_stick.GetBButtonPressed();
+    bool Lift2Up            = m_stick.GetYButton();
+    bool Lift2Down          = m_stick.GetXButton();
 
     bool AngleUp           = m_stick.GetRightBumper();
     bool AngleDown         = m_stick.GetLeftBumper();
 
-    bool RotateClawCW      = false;//m_stick.GetAButton();
-    bool RotateClawCCW     = false;//m_stick.GetBButton();
+
+    bool ClawOpen           = false;//m_logitechController.GetAButton();
+    bool ClawClose          = false;//m_logitechController.GetBButton();
+
+    bool RotateClawCW      = m_logitechController.GetAButton();
+    bool RotateClawCCW     = m_logitechController.GetBButton();
 
 
 
@@ -358,7 +370,7 @@ class Robot : public frc::TimedRobot {
     // ------------------------------------------------------------------------
     //  CLAW CONTROL
     // ------------------------------------------------------------------------
-    /*if ( ToggleClaw )
+    if ( ToggleClaw )
     {
       if ( m_clawState == CLAW_STATE_OPEN )
       {
@@ -381,8 +393,9 @@ class Robot : public frc::TimedRobot {
     else
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
-    }*/
+    }
 
+/*
     if ( ClawOpen )
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
@@ -395,7 +408,35 @@ class Robot : public frc::TimedRobot {
     {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
     }
+    */
 
+
+    if ( ToggleLift2 )
+    {
+      if ( m_lift2State == LIFT2_STATE_OPEN )
+      {
+        m_lift2State = LIFT2_STATE_CLOSE;
+      }
+      else
+      {
+        m_lift2State = LIFT2_STATE_OPEN;
+      }
+    }
+
+    if ( m_lift2State == LIFT2_STATE_OPEN )
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
+    }
+    else if ( m_lift2State == LIFT2_STATE_CLOSE )
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
+    }
+    else
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
+    }
+
+/*
     if ( Lift2Up )
     {
       m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
@@ -407,9 +448,9 @@ class Robot : public frc::TimedRobot {
     else
     {
       m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
-    }
+    }*/
 
-    /*
+    
     if ( RotateClawCW )
     {
       m_ClawRotate.Set( 0.5 );
@@ -421,12 +462,15 @@ class Robot : public frc::TimedRobot {
     else
     {
       m_ClawRotate.Set( 0.0 );
-    }*/
+    }
 
+/*
     double CountsPerTurn = 13000.0;
     double ClawAngle = atan( m_stick.GetRightY() / m_stick.GetRightX() ) / ( 2.0 * 3.14159 );
     double mag = m_stick.GetRightY() * m_stick.GetRightY() + m_stick.GetRightX() * m_stick.GetRightX();
-
+    frc::SmartDashboard::PutNumber("mag",    mag);
+    frc::SmartDashboard::PutNumber("m_stick.GetRightY()",    m_stick.GetRightY());
+    frc::SmartDashboard::PutNumber("m_stick.GetRightX()",    m_stick.GetRightX());
     if ( mag > 0.2 )
     {
       m_ClawRotatePid.SetSetpoint( ClawAngle * CountsPerTurn );
@@ -438,7 +482,7 @@ class Robot : public frc::TimedRobot {
     {
       m_ClawRotate.Set( 0.0 );
     }
-
+*/
 
     // ------------------------------------------------------------------------
     //  ANGLE CONTROL
@@ -450,23 +494,38 @@ class Robot : public frc::TimedRobot {
     {
       if ( m_bottomLimitLeft.Get() )
       {
-        m_angleEncoder.Reset();
         linActLeftValue = 1.0;
+      }
+      else
+      {
+        m_angleEncoder.Reset();        
       }
 
       if ( m_bottomLimitRight.Get() )
       {
-        m_angleEncoder.Reset();
         linActRightValue = 1.0;
+      }
+      else
+      {
+        m_angleEncoder.Reset();        
+      }
+
+      if ( !m_bottomLimitLeft.Get() && !m_bottomLimitRight.Get() )
+      {
+        m_LiftLimitsSet = true;
       }
     }
     else if( AngleUp )
     {
-      if ( m_angleEncoder.GetValue() > -1000 )
+      if ( m_LiftLimitsSet == true )
       {
-        linActRightValue = -1.0;
-        linActLeftValue  = -1.0;
+        if ( m_angleEncoder.GetValue() > -1000 )
+        {
+          linActRightValue = -1.0;
+          linActLeftValue  = -1.0;
+        }
       }
+
     }
 
     frc::SmartDashboard::PutNumber("AngleDown",        AngleDown);
@@ -484,6 +543,7 @@ class Robot : public frc::TimedRobot {
     // ------------------------------------------------------------------------
     double liftMotorValue = 0.0;
 
+
     if ( LiftUp )
     {
       m_liftState = LIFT_STATE_RAISE;
@@ -491,6 +551,10 @@ class Robot : public frc::TimedRobot {
     else if ( LiftDown )
     {
       m_liftState = LIFT_STATE_LOWER;
+    }
+    else
+    {
+      m_liftState = LIFT_STATE_HOLD;
     }
 
     switch ( m_liftState )
