@@ -1,3 +1,5 @@
+//TODO: Need to force lift to lowest position at beginning of robot enable so it does not go back to last saved lift setpoint
+
 // Copyright (c) FIRST and other WPILib contributors.
 // Open Source Software; you can modify and/or share it under the terms of
 // the WPILib BSD license file in the root directory of this project.
@@ -130,7 +132,7 @@ class Robot : public frc::TimedRobot {
   frc::DigitalInput m_bottomLimitRight{ 5 };
   frc::DigitalInput m_liftLimitTop    { 0 };
   frc::DigitalInput m_liftLimitBot    { 9 };
-
+  frc::Encoder      m_liftencoder     { 1, 8 };
 
   // Analog I/O
   DualChannelAnalogEncoder m_angleEncoder{ 0, 1 };
@@ -168,7 +170,10 @@ class Robot : public frc::TimedRobot {
   double kClawRotateD{ 0.00 };
   frc::PIDController m_ClawRotatePid{ kClawRotateP, kClawRotateI, kClawRotateD };
 
-
+  double kLiftHoldP{ 8.0e-5 };
+  double kLiftHoldI{ 4.0e-4 };
+  double kLiftHoldD{ 0.00 };
+  frc::PIDController m_LiftHoldPid{ kLiftHoldP, kLiftHoldI, kLiftHoldD };
 
 
   // Other
@@ -235,6 +240,8 @@ class Robot : public frc::TimedRobot {
     m_autoChooser.AddOption       ( kAutoDrive,       kAutoDrive       );
 
     frc::SmartDashboard::PutData("Auto Modes", &m_autoChooser);
+
+    m_LiftHoldPid.SetIntegratorRange( -0.1, 0.1 ); //stops integrator wind-up
   }
 
   void RobotPeriodic() override {
@@ -260,6 +267,7 @@ class Robot : public frc::TimedRobot {
     m_balancePid.Reset();
     m_balancePid.SetSetpoint( 0.0 );
     m_ClawRotatePid.Reset();
+    m_liftencoder.Reset();
   }
 
 
@@ -325,6 +333,9 @@ class Robot : public frc::TimedRobot {
     m_balancePid.SetSetpoint( 0.0 );
     m_ClawRotatePid.Reset();
     m_LiftLimitsSet = false;
+    m_liftencoder.Reset();
+    m_LiftHoldPid.Reset();
+    m_LiftHoldPid.Reset();
   }
 
 
@@ -542,7 +553,7 @@ class Robot : public frc::TimedRobot {
     //  LIFT CONTROL
     // ------------------------------------------------------------------------
     double liftMotorValue = 0.0;
-
+    int currentliftposition = m_liftencoder.Get();
 
     if ( LiftUp )
     {
@@ -561,6 +572,7 @@ class Robot : public frc::TimedRobot {
     {
       case LIFT_STATE_RAISE:
       {
+        m_LiftHoldPid.SetSetpoint( currentliftposition );
         if ( m_liftLimitTop.Get() )
         {
           m_liftState = LIFT_STATE_HOLD;
@@ -574,6 +586,7 @@ class Robot : public frc::TimedRobot {
 
       case LIFT_STATE_LOWER:
       {
+        m_LiftHoldPid.SetSetpoint( currentliftposition );
         if ( m_liftLimitBot.Get() )
         {
           m_liftState = LIFT_STATE_HOLD;
@@ -581,6 +594,10 @@ class Robot : public frc::TimedRobot {
         else
         {
           liftMotorValue = -0.5;
+          if( currentliftposition < 40000) //slow down lift descent near bottom
+          {
+            liftMotorValue = -0.1;
+          }          
         }
         break;
       }
@@ -588,11 +605,32 @@ class Robot : public frc::TimedRobot {
       default:
       case LIFT_STATE_HOLD:
       {
-        liftMotorValue = 0;
+        if ( !m_liftLimitBot.Get() && !m_liftLimitTop.Get() )
+        {
+          frc::SmartDashboard::PutNumber("liftsetpoint",  m_LiftHoldPid.GetSetpoint() );
+          double motorliftcalc = m_LiftHoldPid.Calculate( currentliftposition );
+          motorliftcalc = std::clamp( motorliftcalc, -0.5, 0.5);
+          frc::SmartDashboard::PutNumber("calculated lift", motorliftcalc  );
+          liftMotorValue = motorliftcalc;
+        }
+        if ( m_liftLimitBot.Get() )
+        {
+          m_liftencoder.Reset();
+          liftMotorValue = 0;
+        }
+        if ( m_liftLimitTop.Get() )
+        {
+          m_LiftHoldPid.SetSetpoint( currentliftposition ); // prevents bouncing off the top switch
+          liftMotorValue = 0;
+        }
+        // liftMotorValue = 0;
         break;
       }
     }
     m_Lift.Set( liftMotorValue );
+
+    int liftEncValue = m_liftencoder.Get();
+    frc::SmartDashboard::PutNumber("liftEncValue",  liftEncValue);
 
   }
 
@@ -602,6 +640,7 @@ class Robot : public frc::TimedRobot {
     m_autoTimer.Stop();
     m_autoTimer.Reset();
     m_autoTimer.Start();
+    m_liftencoder.Reset();
   }
 
 
