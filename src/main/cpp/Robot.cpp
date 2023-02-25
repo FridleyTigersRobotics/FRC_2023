@@ -564,6 +564,8 @@ class Robot : public frc::TimedRobot {
         if ( m_liftLimitTop.Get() )
         {
           m_liftState = LIFT_STATE_HOLD;
+          Lift2Up = true;
+          Lift2Down = false;
         }
         else
         {
@@ -575,8 +577,6 @@ class Robot : public frc::TimedRobot {
       case LIFT_STATE_LOWER:
       {
         m_LiftHoldPid.SetSetpoint( currentliftposition );
-        Lift2Up = false;
-        Lift2Down = true;
         if ( m_liftLimitBot.Get() )
         {
           m_liftState = LIFT_STATE_HOLD;
@@ -584,6 +584,8 @@ class Robot : public frc::TimedRobot {
         else
         {
           liftMotorValue = -0.5;
+          Lift2Up = false;
+          Lift2Down = true;
           if( currentliftposition < 40000) //slow down lift descent near bottom
           {
             liftMotorValue = -0.1;
