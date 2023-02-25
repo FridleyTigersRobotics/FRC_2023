@@ -89,19 +89,23 @@ class DualChannelAnalogEncoder {
 
 
 
-class WPI_VictorSPX_AccelerationLimited {
+
+class AccelerationLimiter {
   public:
-    WPI_VictorSPX_AccelerationLimited( 
-      int    canId, 
+    AccelerationLimiter( 
       double accelerationLimit
       ) :
-      m_motorController{canId},
       m_accelerationLimit{accelerationLimit}
     {
       m_currentValue = 0.0;
     }
 
-    void Set( double value )
+    void Reset( )
+    {
+      m_currentValue = 0.0;
+    }
+
+    double Set( double value )
     {
       if ( ( value >= 0.0 && m_currentValue >= 0.0 && value < m_currentValue ) || 
            ( value <= 0.0 && m_currentValue <= 0.0 && value > m_currentValue ) )
@@ -121,13 +125,35 @@ class WPI_VictorSPX_AccelerationLimited {
         m_currentValue += delta;
       }
       m_currentValue = std::clamp( m_currentValue, -1.0, 1.0 );
-      m_motorController.Set( m_currentValue );
+      return m_currentValue;
     }
 
   private:
-    WPI_VictorSPX m_motorController;
     double m_accelerationLimit;
     double m_currentValue;
+};
+
+
+
+
+class WPI_VictorSPX_AccelerationLimited {
+  public:
+    WPI_VictorSPX_AccelerationLimited( 
+      int    canId, 
+      double accelerationLimit
+      ) :
+      m_motorController{canId},
+      m_accelerationLimiter{accelerationLimit}
+    { }
+
+    void Set( double value )
+    {
+      m_motorController.Set( m_accelerationLimiter.Set( value ) );
+    }
+
+  private:
+    WPI_VictorSPX       m_motorController;
+    AccelerationLimiter m_accelerationLimiter;
 };
 
 
@@ -231,24 +257,8 @@ class Robot : public frc::TimedRobot {
   bool m_AngleLimitsSet = false;
   bool m_WinchEncoderCalibrated = false;
 
-
-
-
-
-  enum winch_lift_state_e
-  {
-    WINCH_LIFT_STATE_HOLD,
-    WINCH_LIFT_STATE_RAISE,
-    WINCH_LIFT_STATE_LOWER
-  } m_winchLiftState = WINCH_LIFT_STATE_HOLD;
-  
-
-  enum angle_state_e
-  {
-    ANGLE_STATE_HOLD,
-    ANGLE_STATE_RAISE,
-    ANGLE_STATE_LOWER
-  } m_angleState = ANGLE_STATE_HOLD;
+  AccelerationLimiter m_DriveSpeedAccelerationLimiter   { 0.1 };
+  AccelerationLimiter m_DriveRotationAccelerationLimiter{ 0.1 };
 
 
   enum claw_state_e
@@ -274,6 +284,7 @@ class Robot : public frc::TimedRobot {
   {
     LIFT_STATE_STARTING_CONFIG,
     LIFT_STATE_GROUND,
+    LIFT_STATE_CUBE,
     LIFT_STATE_DRIVING,
     LIFT_STATE_LOW_GOAL,
     LIFT_STATE_HIGH_GOAL
@@ -413,7 +424,7 @@ class Robot : public frc::TimedRobot {
     bool RotateClawCCW     = m_logitechController.GetBButton();
 
 
-    if ( m_stick.GetAButtonPressed() ) 
+    if ( m_stick.GetLeftBumperPressed() ) 
     {
       m_liftState = LIFT_STATE_GROUND;
     }
@@ -428,6 +439,10 @@ class Robot : public frc::TimedRobot {
     else if ( m_stick.GetYButtonPressed() ) 
     {
       m_liftState = LIFT_STATE_HIGH_GOAL;
+    }
+    else if ( m_stick.GetAButtonPressed() ) 
+    {
+      m_liftState = LIFT_STATE_CUBE;
     }
     else if ( m_stick.GetBackButtonPressed() ) 
     {
@@ -455,17 +470,25 @@ class Robot : public frc::TimedRobot {
 
       case LIFT_STATE_LOW_GOAL:
       {
-        m_AngleHoldPid.SetSetpoint( -600 );
+        m_AngleHoldPid.SetSetpoint( -700 );
         m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
-        m_LiftHoldPid.SetSetpoint( 60000 );
+        m_LiftHoldPid.SetSetpoint( 110000 );
         break;
       }
 
       case LIFT_STATE_HIGH_GOAL:
       {
-        m_AngleHoldPid.SetSetpoint( -600 );
+        m_AngleHoldPid.SetSetpoint( -700 );
         m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_EXTEND;
-        m_LiftHoldPid.SetSetpoint( 150000 );
+        m_LiftHoldPid.SetSetpoint( 200000 );
+        break;
+      }
+
+      case LIFT_STATE_CUBE:  
+      {
+        m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
+        m_AngleHoldPid.SetSetpoint( -70 );
+        m_LiftHoldPid.SetSetpoint( 0 );
         break;
       }
 
@@ -491,10 +514,14 @@ class Robot : public frc::TimedRobot {
     {
       double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
       m_robotDrive.ArcadeDrive(-pidValue, 0.0);
+      m_DriveSpeedAccelerationLimiter.Reset();
+      m_DriveRotationAccelerationLimiter.Reset();
     }
     else
     {
-      m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
+      double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( -m_stick.GetLeftY() );
+      double zRotation = m_DriveRotationAccelerationLimiter.Set( -m_stick.GetRawAxis(3) );
+      m_robotDrive.ArcadeDrive( xSpeed, zRotation );
     }
 
 
