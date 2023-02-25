@@ -448,19 +448,7 @@ class Robot : public frc::TimedRobot {
     }
     */
 
-    if ( Lift2Up )
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
-    }
-    else if ( Lift2Down )
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
-    }
-    else
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
-    }
-
+    
     
     if ( RotateClawCW )
     {
@@ -636,6 +624,23 @@ class Robot : public frc::TimedRobot {
     int liftEncValue = m_liftencoder.Get();
     frc::SmartDashboard::PutNumber("liftEncValue",  liftEncValue);
 
+  
+  if ( Lift2Up )
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
+    }
+    else if ( Lift2Down )
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
+    }
+    else
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
+    }
+
+  
+  
+  
   }
 
 
