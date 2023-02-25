@@ -144,8 +144,8 @@ class Robot : public frc::TimedRobot {
 
 
   // User Input Devices
-  frc::XboxController m_stick{0};
-  frc::XboxController m_logitechController{1};
+  frc::XboxController m_stick{1};
+  frc::XboxController m_logitechController{0};
 
   // Drive System
   frc::MotorControllerGroup m_leftMotors { m_frontleftMotor,  m_rearleftMotor  };
