@@ -341,19 +341,19 @@ class Robot : public frc::TimedRobot {
 
 
   void TeleopPeriodic() override {
-    bool SelfBalanceEnable = false;//m_stick.GetYButton();
-    bool ToggleClaw        = m_stick.GetXButtonPressed();
+    bool SelfBalanceEnable = m_stick.GetYButton();
+    bool ToggleClaw        = m_stick.GetAButtonPressed();
     //bool ToggleLift2       = m_stick.GetYButtonPressed();
 
 
-    bool LiftUp            = m_logitechController.GetAButton();
-    bool LiftDown          = m_logitechController.GetBButton();
+    bool LiftUp            = m_stick.GetRawAxis(2)<-0.5;
+    bool LiftDown          = m_stick.GetRawAxis(2)>0.5;
 
     bool Lift2Up;           // = false; //m_stick.GetYButton(); NEED TO DEFINE START STATE, NOT NOW FOR DRIVING TESTING
     bool Lift2Down;         //= true; //m_stick.GetXButton();
 
-    bool AngleUp           = m_logitechController.GetRightBumper();
-    bool AngleDown         = m_logitechController.GetLeftBumper();
+    bool AngleUp           = m_stick.GetRightBumper();
+    bool AngleDown         = m_stick.GetLeftBumper();
 
 
     bool ClawOpen           = false;//m_logitechController.GetAButton();
@@ -374,7 +374,7 @@ class Robot : public frc::TimedRobot {
     }
     else
     {
-      m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
+      m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetRawAxis(3));
     }
 
 
@@ -588,7 +588,7 @@ class Robot : public frc::TimedRobot {
           Lift2Down = true;
           if( currentliftposition < 40000) //slow down lift descent near bottom
           {
-            liftMotorValue = -0.1;
+            liftMotorValue = -0.5; // change back later!!!
           }          
         }
         break;
