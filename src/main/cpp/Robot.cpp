@@ -260,6 +260,10 @@ class Robot : public frc::TimedRobot {
   AccelerationLimiter m_DriveSpeedAccelerationLimiter   { 0.1 };
   AccelerationLimiter m_DriveRotationAccelerationLimiter{ 0.1 };
 
+  double m_angleSetpoint     = 0;
+  double m_winchLiftSetpoint = 0;
+
+
 
   enum claw_state_e
   {
@@ -282,6 +286,7 @@ class Robot : public frc::TimedRobot {
 
   enum lift_state_e
   {
+    LIFT_STATE_HOLD,
     LIFT_STATE_STARTING_CONFIG,
     LIFT_STATE_GROUND,
     LIFT_STATE_CUBE,
@@ -412,6 +417,8 @@ class Robot : public frc::TimedRobot {
     m_LiftHoldPid.Reset();
     m_AngleHoldPid.Reset();
     m_liftState = LIFT_STATE_GROUND;
+    m_angleSetpoint = 0;
+    m_winchLiftSetpoint = 0;
   }
 
 
@@ -422,6 +429,14 @@ class Robot : public frc::TimedRobot {
 
     bool RotateClawCW      = m_logitechController.GetAButton();
     bool RotateClawCCW     = m_logitechController.GetBButton();
+
+
+    bool ManualWinchLiftUp      = m_logitechController.GetRightBumper();
+    bool ManualWinchLiftDown    = m_logitechController.GetLeftBumper();
+
+    bool ManualAngleUp      = m_logitechController.GetRawAxis(2) > 0.1;
+    bool ManualAngleDown    = m_logitechController.GetRawAxis(2) < -0.1;
+
 
 
     if ( m_stick.GetLeftBumperPressed() ) 
@@ -454,57 +469,88 @@ class Robot : public frc::TimedRobot {
     {
       case LIFT_STATE_STARTING_CONFIG:
       {
-        m_AngleHoldPid.SetSetpoint( -1000 );
+        m_angleSetpoint     = -1000;
+        m_winchLiftSetpoint = 0;
         m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
-        m_LiftHoldPid.SetSetpoint( 0 );
+        m_liftState          = LIFT_STATE_HOLD;
         break;
       }      
 
       case LIFT_STATE_DRIVING:
       {
-        m_AngleHoldPid.SetSetpoint( -400 );
+        m_angleSetpoint     = -400;
+        m_winchLiftSetpoint = 0;
         m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
-        m_LiftHoldPid.SetSetpoint( 0 );
+        m_liftState          = LIFT_STATE_HOLD;
         break;
       }
 
       case LIFT_STATE_LOW_GOAL:
       {
-        m_AngleHoldPid.SetSetpoint( -700 );
+        m_angleSetpoint     = -700;
+        m_winchLiftSetpoint = 110000;
         m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
-        m_LiftHoldPid.SetSetpoint( 110000 );
+        m_liftState          = LIFT_STATE_HOLD;
         break;
       }
 
       case LIFT_STATE_HIGH_GOAL:
       {
-        m_AngleHoldPid.SetSetpoint( -700 );
+        m_angleSetpoint     = -700;
+        m_winchLiftSetpoint = 200000;
         m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_EXTEND;
-        m_LiftHoldPid.SetSetpoint( 200000 );
+        m_liftState          = LIFT_STATE_HOLD;
         break;
       }
 
       case LIFT_STATE_CUBE:  
       {
+        m_angleSetpoint     = -70;
+        m_winchLiftSetpoint = 0;
         m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
-        m_AngleHoldPid.SetSetpoint( -70 );
-        m_LiftHoldPid.SetSetpoint( 0 );
+        m_liftState          = LIFT_STATE_HOLD;
         break;
       }
 
       case LIFT_STATE_GROUND:  
+      {
+        m_angleSetpoint     = 2000;
+        m_winchLiftSetpoint = 0;
+        m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
+        m_liftState          = LIFT_STATE_HOLD;
+        break;
+      }
+
+      case LIFT_STATE_HOLD:  
       default:
       {
-        m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
-        m_AngleHoldPid.SetSetpoint( 2000 );
-        m_LiftHoldPid.SetSetpoint( 0 );
         break;
       }
     }
 
+    int WinchLiftEncoderValue = m_liftencoder.Get();
+    if ( ManualWinchLiftUp )
+    {
+      m_winchLiftSetpoint = WinchLiftEncoderValue + 5000;
+    }
+    else if ( ManualWinchLiftDown )
+    {
+      m_winchLiftSetpoint = WinchLiftEncoderValue - 5000;
+    }
+
+    int AngleEncoderValue = m_angleEncoder.GetValue();
+    if ( ManualAngleUp )
+    {
+      m_angleSetpoint = AngleEncoderValue - 500;
+    }
+    else if ( ManualAngleDown )
+    {
+      m_angleSetpoint = AngleEncoderValue + 500;
+    }
 
 
-
+    m_AngleHoldPid.SetSetpoint( m_angleSetpoint );
+    m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
 
 
     // ------------------------------------------------------------------------
@@ -669,7 +715,7 @@ class Robot : public frc::TimedRobot {
     }
     if ( m_liftLimitTop.Get() )
     {
-      //m_LiftHoldPid.SetSetpoint( currentliftposition ); // prevents bouncing off the top switch
+      m_LiftHoldPid.SetSetpoint( currentliftposition ); // prevents bouncing off the top switch
       liftMotorValue = std::clamp( liftMotorValue, -0.5, 0.0);
     }
 
