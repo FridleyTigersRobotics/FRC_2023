@@ -343,24 +343,24 @@ class Robot : public frc::TimedRobot {
   void TeleopPeriodic() override {
     bool SelfBalanceEnable = false;//m_stick.GetYButton();
     bool ToggleClaw        = m_stick.GetXButtonPressed();
-    bool ToggleLift2       = m_stick.GetYButtonPressed();
+    //bool ToggleLift2       = m_stick.GetYButtonPressed();
 
 
-    bool LiftUp            = m_stick.GetAButton();
-    bool LiftDown          = m_stick.GetBButton();
+    bool LiftUp            = m_logitechController.GetAButton();
+    bool LiftDown          = m_logitechController.GetBButton();
 
-    bool Lift2Up            = m_stick.GetYButton();
-    bool Lift2Down          = m_stick.GetXButton();
+    bool Lift2Up            = false; //m_stick.GetYButton();
+    bool Lift2Down          = true; //m_stick.GetXButton();
 
-    bool AngleUp           = m_stick.GetRightBumper();
-    bool AngleDown         = m_stick.GetLeftBumper();
+    bool AngleUp           = m_logitechController.GetRightBumper();
+    bool AngleDown         = m_logitechController.GetLeftBumper();
 
 
     bool ClawOpen           = false;//m_logitechController.GetAButton();
     bool ClawClose          = false;//m_logitechController.GetBButton();
 
-    bool RotateClawCW      = m_logitechController.GetAButton();
-    bool RotateClawCCW     = m_logitechController.GetBButton();
+    bool RotateClawCW      = m_logitechController.GetXButton();
+    bool RotateClawCCW     = m_logitechController.GetYButton();
 
 
 
@@ -421,7 +421,7 @@ class Robot : public frc::TimedRobot {
     }
     */
 
-
+    /*
     if ( ToggleLift2 )
     {
       if ( m_lift2State == LIFT2_STATE_OPEN )
@@ -446,8 +446,8 @@ class Robot : public frc::TimedRobot {
     {
       m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
     }
+    */
 
-/*
     if ( Lift2Up )
     {
       m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
@@ -459,7 +459,7 @@ class Robot : public frc::TimedRobot {
     else
     {
       m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
-    }*/
+    }
 
     
     if ( RotateClawCW )
@@ -587,6 +587,8 @@ class Robot : public frc::TimedRobot {
       case LIFT_STATE_LOWER:
       {
         m_LiftHoldPid.SetSetpoint( currentliftposition );
+        Lift2Up = false;
+        Lift2Down = true;
         if ( m_liftLimitBot.Get() )
         {
           m_liftState = LIFT_STATE_HOLD;
@@ -622,6 +624,8 @@ class Robot : public frc::TimedRobot {
         {
           m_LiftHoldPid.SetSetpoint( currentliftposition ); // prevents bouncing off the top switch
           liftMotorValue = 0;
+          Lift2Up = true;
+          Lift2Down = false;
         }
         // liftMotorValue = 0;
         break;
