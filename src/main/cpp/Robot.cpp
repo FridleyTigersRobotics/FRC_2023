@@ -349,8 +349,8 @@ class Robot : public frc::TimedRobot {
     bool LiftUp            = m_logitechController.GetAButton();
     bool LiftDown          = m_logitechController.GetBButton();
 
-    bool Lift2Up            = false; //m_stick.GetYButton();
-    bool Lift2Down          = true; //m_stick.GetXButton();
+    bool Lift2Up;           // = false; //m_stick.GetYButton(); NEED TO DEFINE START STATE, NOT NOW FOR DRIVING TESTING
+    bool Lift2Down;         //= true; //m_stick.GetXButton();
 
     bool AngleUp           = m_logitechController.GetRightBumper();
     bool AngleDown         = m_logitechController.GetLeftBumper();
