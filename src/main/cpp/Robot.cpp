@@ -89,7 +89,46 @@ class DualChannelAnalogEncoder {
 
 
 
+class WPI_VictorSPX_AccelerationLimited {
+  public:
+    WPI_VictorSPX_AccelerationLimited( 
+      int    canId, 
+      double accelerationLimit
+      ) :
+      m_motorController{canId},
+      m_accelerationLimit{accelerationLimit}
+    {
+      m_currentValue = 0.0;
+    }
 
+    void Set( double value )
+    {
+      if ( ( value >= 0.0 && m_currentValue >= 0.0 && value < m_currentValue ) || 
+           ( value <= 0.0 && m_currentValue <= 0.0 && value > m_currentValue ) )
+      {
+        // Do not apply acceleration limit for slowing down.
+        m_currentValue = value;
+      }
+      else if ( ( value <= 0.0 && m_currentValue > 0.0 ) ||
+                ( value >= 0.0 && m_currentValue < 0.0 ) )
+      {
+        // Allow dropping value to zero if changing directions.
+        m_currentValue = 0.0;
+      }
+      else
+      {
+        double delta = std::clamp( value - m_currentValue, -m_accelerationLimit, m_accelerationLimit );
+        m_currentValue += delta;
+      }
+      m_currentValue = std::clamp( m_currentValue, -1.0, 1.0 );
+      m_motorController.Set( m_currentValue );
+    }
+
+  private:
+    WPI_VictorSPX m_motorController;
+    double m_accelerationLimit;
+    double m_currentValue;
+};
 
 
 
@@ -109,15 +148,15 @@ class Robot : public frc::TimedRobot {
   int const kLiftCanId     = 10;
   int const kClawRotateCanId = 11;
 
-  WPI_TalonSRX                 m_frontleftMotor { kFLMotorCanId };
-  WPI_TalonSRX                 m_rearleftMotor  { kRLMotorCanId };
-  WPI_TalonSRX                 m_rearrightMotor { kRRMotorCanId };
-  WPI_TalonSRX                 m_frontrightMotor{ kFRMotorCanId };
-  frc::PneumaticsControlModule m_pcm            { kPcmCanId     };
-  WPI_VictorSPX                m_LinActRight    { kLinActACanId };
-  WPI_VictorSPX                m_LinActLeft     { kLinActBCanId };
-  WPI_VictorSPX                m_Lift           { kLiftCanId    };
-  WPI_VictorSPX                m_ClawRotate     { kClawRotateCanId };
+  WPI_TalonSRX                       m_frontleftMotor { kFLMotorCanId };
+  WPI_TalonSRX                       m_rearleftMotor  { kRLMotorCanId };
+  WPI_TalonSRX                       m_rearrightMotor { kRRMotorCanId };
+  WPI_TalonSRX                       m_frontrightMotor{ kFRMotorCanId };
+  frc::PneumaticsControlModule       m_pcm            { kPcmCanId     };
+  WPI_VictorSPX_AccelerationLimited  m_LinActRight    { kLinActACanId,    0.05 };
+  WPI_VictorSPX_AccelerationLimited  m_LinActLeft     { kLinActBCanId,    0.05 };
+  WPI_VictorSPX_AccelerationLimited  m_Lift           { kLiftCanId,       0.05 };
+  WPI_VictorSPX_AccelerationLimited  m_ClawRotate     { kClawRotateCanId, 0.05 };
 
 
   // Pneumatics
@@ -369,21 +408,6 @@ class Robot : public frc::TimedRobot {
   void TeleopPeriodic() override {
     bool SelfBalanceEnable = false;//m_stick.GetYButton();
     bool ToggleClaw        = m_stick.GetRightBumperPressed();//m_stick.GetXButtonPressed();
-    bool ToggleLift2       = false;//m_stick.GetYButtonPressed();
-
-
-    bool LiftUp            = m_logitechController.GetYButton();//m_stick.GetAButton();
-    bool LiftDown          = m_logitechController.GetXButton();//m_stick.GetBButton();
-
-    bool Lift2Up            = false;//m_stick.GetYButton();
-    bool Lift2Down          = false;//m_stick.GetXButton();
-
-    bool AngleUp           = false;//m_stick.GetRightBumperPressed();
-    bool AngleDown         = false;//m_stick.GetLeftBumperPressed();
-
-
-    bool ClawOpen           = false;//m_logitechController.GetAButton();
-    bool ClawClose          = false;//m_logitechController.GetBButton();
 
     bool RotateClawCW      = m_logitechController.GetAButton();
     bool RotateClawCCW     = m_logitechController.GetBButton();
