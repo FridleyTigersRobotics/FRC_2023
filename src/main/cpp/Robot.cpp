@@ -48,6 +48,11 @@ class DualChannelAnalogEncoder {
       m_value = 0;
     }
 
+    void Set( int value )
+    {
+      m_value = value;
+    }
+
     int GetValue()
     {
       return m_value;
@@ -157,6 +162,28 @@ class WPI_VictorSPX_AccelerationLimited {
 };
 
 
+static const int MAX_NAVX_MXP_DIGIO_PIN_NUMBER  = 9;
+static const int NUM_ROBORIO_ONBOARD_DIGIO_PINS = 10;
+
+// Function from Kauailab Website:
+//   https://pdocs.kauailabs.com/navx-mxp/examples/mxp-io-expansion/
+int GetDioChannelFromPin( int io_pin_number ) {
+    int roborio_channel = 0;
+    if ( io_pin_number < 0 ) {
+        throw std::runtime_error("Error:  navX-MXP I/O Pin #");
+    }
+
+    if ( io_pin_number > MAX_NAVX_MXP_DIGIO_PIN_NUMBER ) {
+        throw std::runtime_error("Error:  Invalid navX-MXP Digital I/O Pin #");
+    }
+    roborio_channel = io_pin_number + NUM_ROBORIO_ONBOARD_DIGIO_PINS +
+                      (io_pin_number > 3 ? 4 : 0);
+
+    return roborio_channel;
+}
+
+
+
 
 class Robot : public frc::TimedRobot {
 
@@ -191,8 +218,8 @@ class Robot : public frc::TimedRobot {
 
 
   // Digial I/O
-  frc::Encoder      m_leftencoder     { 6, 7 };
-  frc::Encoder      m_rightencoder    { 2, 3 };
+  frc::Encoder      m_leftencoder     { GetDioChannelFromPin(2), GetDioChannelFromPin(3) };
+  frc::Encoder      m_rightencoder    { GetDioChannelFromPin(0), GetDioChannelFromPin(1) };
   frc::DigitalInput m_bottomLimitLeft { 4 };
   frc::DigitalInput m_bottomLimitRight{ 5 };
   frc::DigitalInput m_liftLimitTop    { 0 };
@@ -338,6 +365,8 @@ class Robot : public frc::TimedRobot {
     frc::SmartDashboard::PutNumber("m_liftencoder",      m_liftencoder.Get());
     frc::SmartDashboard::PutNumber("m_liftLimitTop",     m_liftLimitTop.Get());
     frc::SmartDashboard::PutNumber("m_liftLimitBot",     m_liftLimitBot.Get());
+
+    frc::SmartDashboard::PutNumber("m_angleSetpoint",     m_angleSetpoint);
   }
 
 
@@ -420,9 +449,9 @@ class Robot : public frc::TimedRobot {
     m_LiftHoldPid.Reset();
     m_LiftHoldPid.Reset();
     m_AngleHoldPid.Reset();
-    m_liftState = LIFT_STATE_GROUND;
-    m_angleSetpoint = 0;
-    m_winchLiftSetpoint = 0;
+    m_liftState = LIFT_STATE_HOLD;
+    m_angleSetpoint     = m_angleEncoder.GetValue();
+    m_winchLiftSetpoint = m_liftencoder.Get();
   }
 
 
@@ -444,7 +473,6 @@ class Robot : public frc::TimedRobot {
 
     bool ManualAngleUp      = m_stick.GetRawAxis(3) > 0.1 || m_logitechController.GetRawAxis(3) > 0.1;
     bool ManualAngleDown    = m_stick.GetRawAxis(2) > 0.1 || m_logitechController.GetRawAxis(2) > 0.1;
-
 
 
     if ( m_logitechController.GetBButtonPressed() ) 
@@ -477,7 +505,7 @@ class Robot : public frc::TimedRobot {
     {
       case LIFT_STATE_STARTING_CONFIG:
       {
-        m_angleSetpoint     = -1000;
+        m_angleSetpoint     = -1400;
         m_winchLiftSetpoint = 0;
         m_liftState          = LIFT_STATE_HOLD;
         break;
