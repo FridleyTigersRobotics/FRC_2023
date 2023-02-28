@@ -162,12 +162,12 @@ class WPI_VictorSPX_AccelerationLimited {
 };
 
 
-static const int MAX_NAVX_MXP_DIGIO_PIN_NUMBER  = 9;
-static const int NUM_ROBORIO_ONBOARD_DIGIO_PINS = 10;
 
 // Function from Kauailab Website:
 //   https://pdocs.kauailabs.com/navx-mxp/examples/mxp-io-expansion/
 int GetDioChannelFromPin( int io_pin_number ) {
+    static const int MAX_NAVX_MXP_DIGIO_PIN_NUMBER  = 9;
+    static const int NUM_ROBORIO_ONBOARD_DIGIO_PINS = 10;
     int roborio_channel = 0;
     if ( io_pin_number < 0 ) {
         throw std::runtime_error("Error:  navX-MXP I/O Pin #");
@@ -181,7 +181,6 @@ int GetDioChannelFromPin( int io_pin_number ) {
 
     return roborio_channel;
 }
-
 
 
 
@@ -236,8 +235,9 @@ class Robot : public frc::TimedRobot {
 
 
   // User Input Devices
-  frc::XboxController m_stick{1};
-  frc::XboxController m_logitechController{0};
+  frc::XboxController m_DriveController{1};
+  frc::XboxController m_AuxController  {0};
+
 
   // Drive System
   frc::MotorControllerGroup m_leftMotors { m_frontleftMotor,  m_rearleftMotor  };
@@ -290,9 +290,8 @@ class Robot : public frc::TimedRobot {
   double m_angleSetpoint     = 0;
   double m_winchLiftSetpoint = 0;
 
-
-    bool m_ManualAngleUpPrev      = false;
-    bool m_ManualAngleDownPrev    = false;
+  bool m_PrevManualWinchLiftControlEnabled = false;
+  bool m_PrevManualAngleControlEnabled     = false;
 
 
   enum claw_state_e
@@ -383,14 +382,14 @@ class Robot : public frc::TimedRobot {
 
 
   void TestPeriodic() override {
-    bool AngleUpR    = m_stick.GetRightBumper();
-    bool AngleUpL    = m_stick.GetLeftBumper();
-    bool AngleDownR  = m_stick.GetYButton();
-    bool AngleDownL  = m_stick.GetXButton();
-    bool LiftUp      = m_stick.GetAButton();
-    bool LiftDown    = m_stick.GetBButton();
+    bool AngleUpR    = m_DriveController.GetRightBumper();
+    bool AngleUpL    = m_DriveController.GetLeftBumper();
+    bool AngleDownR  = m_DriveController.GetYButton();
+    bool AngleDownL  = m_DriveController.GetXButton();
+    bool LiftUp      = m_DriveController.GetAButton();
+    bool LiftDown    = m_DriveController.GetBButton();
 
-    //m_robotDrive.ArcadeDrive(-m_stick.GetLeftY(), -m_stick.GetLeftX());
+    //m_robotDrive.ArcadeDrive(-m_DriveController.GetLeftY(), -m_DriveController.GetLeftX());
 
     if( AngleDownL )
     {
@@ -457,49 +456,55 @@ class Robot : public frc::TimedRobot {
 
 
   void TeleopPeriodic() override {
-    bool SelfBalanceEnable = m_stick.GetYButton();
-    bool ToggleClaw        = m_stick.GetXButtonPressed();
+    bool SelfBalanceEnable = m_DriveController.GetYButton();
+    bool ToggleClaw        = m_DriveController.GetXButtonPressed();
 
-    bool RotateClawCW      = m_stick.GetAButton();
-    bool RotateClawCCW     = m_stick.GetBButton();
+    bool RotateClawCW      = m_DriveController.GetAButton();
+    bool RotateClawCCW     = m_DriveController.GetBButton();
+
+    // Maunal Winch Lift Control
+    bool ManualWinchLiftUp              = m_DriveController.GetRightBumper() || m_AuxController.GetRightBumper();
+    bool ManualWinchLiftDown            = m_DriveController.GetLeftBumper() || m_AuxController.GetLeftBumper();
+    bool ManualWinchLiftControlEnabled  = ManualWinchLiftUp || ManualWinchLiftDown;
+    bool ManualWinchLiftControlEnded    = m_PrevManualWinchLiftControlEnabled && !ManualWinchLiftControlEnabled;
+    m_PrevManualWinchLiftControlEnabled = ManualWinchLiftControlEnabled;
+
+    // Maunal Angle Control
+    double const triggerThreshold = 0.1;
+    bool ManualAngleUp   = ( m_DriveController.GetRightTriggerAxis() > triggerThreshold ) || 
+                           ( m_AuxController.GetRightTriggerAxis()   > triggerThreshold );
+    bool ManualAngleDown = ( m_DriveController.GetLeftTriggerAxis()  > triggerThreshold ) || 
+                           ( m_AuxController.GetLeftTriggerAxis()    > triggerThreshold );
+    bool ManualAngleControlEnabled  = ManualAngleUp || ManualAngleDown;
+    bool ManualAngleControlEnded    = m_PrevManualAngleControlEnabled && !ManualAngleControlEnabled;
+    m_PrevManualAngleControlEnabled = ManualAngleControlEnabled;
 
 
-    bool ManualWinchLiftUp      = m_stick.GetRightBumper() || m_logitechController.GetRightBumper();
-    bool ManualWinchLiftDown    = m_stick.GetLeftBumper() || m_logitechController.GetLeftBumper();
-
-    bool ManualWinchLiftUpEnd      = m_stick.GetRightBumperReleased() || m_logitechController.GetRightBumperReleased();
-    bool ManualWinchLiftDownEnd    = m_stick.GetLeftBumperReleased() || m_logitechController.GetLeftBumperReleased();
-
-
-    bool ManualAngleUp      = m_stick.GetRawAxis(3) > 0.1 || m_logitechController.GetRawAxis(3) > 0.1;
-    bool ManualAngleDown    = m_stick.GetRawAxis(2) > 0.1 || m_logitechController.GetRawAxis(2) > 0.1;
-
-
-    if ( m_logitechController.GetBButtonPressed() ) 
+    // Lift Presets
+    if ( m_AuxController.GetBButtonPressed() ) 
     {
       m_liftState = LIFT_STATE_GROUND;
     }
-    else if ( m_logitechController.GetBButtonPressed() ) 
+    else if ( m_AuxController.GetBButtonPressed() ) 
     {
       m_liftState = LIFT_STATE_DRIVING;
     }
-    else if ( m_logitechController.GetXButtonPressed() ) 
+    else if ( m_AuxController.GetXButtonPressed() ) 
     {
       m_liftState = LIFT_STATE_LOW_GOAL;
     }
-    else if ( m_logitechController.GetYButtonPressed() ) 
+    else if ( m_AuxController.GetYButtonPressed() ) 
     {
       m_liftState = LIFT_STATE_HIGH_GOAL;
     }
-    else if ( m_logitechController.GetAButtonPressed() ) 
+    else if ( m_AuxController.GetAButtonPressed() ) 
     {
       m_liftState = LIFT_STATE_CUBE;
     }
-    else if ( m_logitechController.GetBackButtonPressed() ) 
+    else if ( m_AuxController.GetBackButtonPressed() ) 
     {
       m_liftState = LIFT_STATE_STARTING_CONFIG;
     }
-
 
     switch ( m_liftState )
     {
@@ -558,6 +563,7 @@ class Robot : public frc::TimedRobot {
       }
     }
 
+    // Manual Winch Lift Control
     int WinchLiftEncoderValue = m_liftencoder.Get();
     if ( ManualWinchLiftUp )
     {
@@ -574,8 +580,9 @@ class Robot : public frc::TimedRobot {
     {
       m_winchLiftSetpoint = WinchLiftEncoderValue - 5000;
     }
-    else if ( ManualWinchLiftUpEnd || ManualWinchLiftDownEnd )
+    else if ( ManualWinchLiftControlEnded )
     {
+      // If manual control has ended stay at the current position.
       m_winchLiftSetpoint = WinchLiftEncoderValue;
     }
 
@@ -584,6 +591,9 @@ class Robot : public frc::TimedRobot {
       m_winchLiftSetpoint = WinchLiftEncoderValue;
     }
 
+    m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
+
+    // Manual Angle Control
     int AngleEncoderValue = m_angleEncoder.GetValue();
     if ( ManualAngleUp )
     {
@@ -593,11 +603,14 @@ class Robot : public frc::TimedRobot {
     {
       m_angleSetpoint = AngleEncoderValue + 500;
     }
-    else if ( m_ManualAngleUpPrev   == true && ManualAngleUp   == false || 
-              m_ManualAngleDownPrev == true && ManualAngleDown == false )
+    else if ( ManualAngleControlEnded )
     {
+      // If manual control has ended stay at the current position.
       m_angleSetpoint = m_angleEncoder.GetValue();
     }
+    m_AngleHoldPid.SetSetpoint( m_angleSetpoint );
+
+
 
     if ( m_winchLiftSetpoint   > 170000 || 
          WinchLiftEncoderValue > 170000 || 
@@ -610,11 +623,7 @@ class Robot : public frc::TimedRobot {
       m_pneumaticLiftState = PNEUMATIC_LIFT_STATE_CONTRACT;
     }
 
-    m_AngleHoldPid.SetSetpoint( m_angleSetpoint );
-    m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
 
-    m_ManualAngleUpPrev   = ManualAngleUp;
-    m_ManualAngleDownPrev = ManualAngleDown;
 
     // ------------------------------------------------------------------------
     //  DRIVE CONTROL
@@ -628,8 +637,8 @@ class Robot : public frc::TimedRobot {
     }
     else
     {
-      double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( -m_stick.GetLeftY() );
-      double zRotation = m_DriveRotationAccelerationLimiter.Set( -m_stick.GetRightX() );
+      double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( -m_DriveController.GetLeftY() );
+      double zRotation = m_DriveRotationAccelerationLimiter.Set( -m_DriveController.GetRightX() );
       m_robotDrive.ArcadeDrive( xSpeed, zRotation );
     }
 
@@ -663,21 +672,6 @@ class Robot : public frc::TimedRobot {
     }
 
 
-
-    if ( m_pneumaticLiftState == PNEUMATIC_LIFT_STATE_EXTEND )
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
-    }
-    else if ( m_pneumaticLiftState == PNEUMATIC_LIFT_STATE_CONTRACT )
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
-    }
-    else
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
-    }
-
-
     if ( RotateClawCW )
     {
       m_ClawRotate.Set( 1.0 );
@@ -691,25 +685,6 @@ class Robot : public frc::TimedRobot {
       m_ClawRotate.Set( 0.0 );
     }
 
-/*
-    double CountsPerTurn = 13000.0;
-    double ClawAngle = atan( m_stick.GetRightY() / m_stick.GetRightX() ) / ( 2.0 * 3.14159 );
-    double mag = m_stick.GetRightY() * m_stick.GetRightY() + m_stick.GetRightX() * m_stick.GetRightX();
-    frc::SmartDashboard::PutNumber("mag",    mag);
-    frc::SmartDashboard::PutNumber("m_stick.GetRightY()",    m_stick.GetRightY());
-    frc::SmartDashboard::PutNumber("m_stick.GetRightX()",    m_stick.GetRightX());
-    if ( mag > 0.2 )
-    {
-      m_ClawRotatePid.SetSetpoint( ClawAngle * CountsPerTurn );
-      double clawPower = m_ClawRotatePid.Calculate( m_clawEncoder.GetValue() );
-
-      m_ClawRotate.Set( clawPower );
-    }
-    else
-    {
-      m_ClawRotate.Set( 0.0 );
-    }
-*/
 
     // ------------------------------------------------------------------------
     //  ANGLE CONTROL
@@ -758,7 +733,7 @@ class Robot : public frc::TimedRobot {
 
 
     // ------------------------------------------------------------------------
-    //  LIFT CONTROL
+    //  WINCH LIFT CONTROL
     // ------------------------------------------------------------------------
     double liftMotorValue = 0.0;
     int currentliftposition = m_liftencoder.Get();
@@ -794,12 +769,32 @@ class Robot : public frc::TimedRobot {
     m_Lift.Set( liftMotorValue );
 
 
+    // ------------------------------------------------------------------------
+    //  PNEUMATIC LIFT CONTROL
+    // ------------------------------------------------------------------------
+    if ( m_pneumaticLiftState == PNEUMATIC_LIFT_STATE_EXTEND )
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
+    }
+    else if ( m_pneumaticLiftState == PNEUMATIC_LIFT_STATE_CONTRACT )
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
+    }
+    else
+    {
+      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
+    }
+
+
 
   }
 
-    void Subsystem_AngleUpdate() {
 
-    }
+
+
+  void Subsystem_AngleUpdate() {
+
+  }
 
 
 
