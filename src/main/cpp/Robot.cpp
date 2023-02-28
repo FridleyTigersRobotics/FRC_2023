@@ -450,8 +450,6 @@ class Robot : public frc::TimedRobot {
     bool SelfBalanceEnable = m_DriveController.GetYButton();
     bool ToggleClaw        = m_DriveController.GetXButtonPressed();
 
-    double RotateClawValue = m_AuxController.GetLeftX();
-
     // Maunal Winch Lift Control
     bool ManualWinchLiftUp              = m_DriveController.GetRightBumper() || m_AuxController.GetRightBumper();
     bool ManualWinchLiftDown            = m_DriveController.GetLeftBumper() || m_AuxController.GetLeftBumper();
@@ -468,6 +466,8 @@ class Robot : public frc::TimedRobot {
     bool ManualAngleControlEnabled  = ManualAngleUp || ManualAngleDown;
     bool ManualAngleControlEnded    = m_PrevManualAngleControlEnabled && !ManualAngleControlEnabled;
     m_PrevManualAngleControlEnabled = ManualAngleControlEnabled;
+
+    m_rotateClawValue = m_AuxController.GetLeftX();
 
 
     // Lift Presets
