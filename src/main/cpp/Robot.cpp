@@ -459,8 +459,7 @@ class Robot : public frc::TimedRobot {
     bool SelfBalanceEnable = m_DriveController.GetYButton();
     bool ToggleClaw        = m_DriveController.GetXButtonPressed();
 
-    bool RotateClawCW      = m_DriveController.GetAButton();
-    bool RotateClawCCW     = m_DriveController.GetBButton();
+    double RotateClawValue = m_AuxController.GetLeftX();
 
     // Maunal Winch Lift Control
     bool ManualWinchLiftUp              = m_DriveController.GetRightBumper() || m_AuxController.GetRightBumper();
@@ -565,6 +564,9 @@ class Robot : public frc::TimedRobot {
 
     // Manual Winch Lift Control
     int WinchLiftEncoderValue = m_liftencoder.Get();
+    // Offset setpoint by ( 1 / P ) for max speed.
+    double const WinchEncoderValueOffset = ( 1.0 / kLiftHoldP );
+
     if ( ManualWinchLiftUp )
     {
       if ( m_liftLimitTop.Get() )
@@ -573,12 +575,12 @@ class Robot : public frc::TimedRobot {
       }
       else
       {
-        m_winchLiftSetpoint = WinchLiftEncoderValue + 5000;
+        m_winchLiftSetpoint = WinchLiftEncoderValue + WinchEncoderValueOffset; 
       }
     }
     else if ( ManualWinchLiftDown )
     {
-      m_winchLiftSetpoint = WinchLiftEncoderValue - 5000;
+      m_winchLiftSetpoint = WinchLiftEncoderValue - WinchEncoderValueOffset;
     }
     else if ( ManualWinchLiftControlEnded )
     {
@@ -595,18 +597,21 @@ class Robot : public frc::TimedRobot {
 
     // Manual Angle Control
     int AngleEncoderValue = m_angleEncoder.GetValue();
+    // Offset setpoint by ( 1 / P ) for max speed.
+    double const AngleEncoderValueOffset = ( 1 / kAngleHoldP );
+
     if ( ManualAngleUp )
     {
-      m_angleSetpoint = AngleEncoderValue - 500;
+      m_angleSetpoint = AngleEncoderValue - AngleEncoderValueOffset;
     }
     else if ( ManualAngleDown )
     {
-      m_angleSetpoint = AngleEncoderValue + 500;
+      m_angleSetpoint = AngleEncoderValue +  AngleEncoderValueOffset;
     }
     else if ( ManualAngleControlEnded )
     {
       // If manual control has ended stay at the current position.
-      m_angleSetpoint = m_angleEncoder.GetValue();
+      m_angleSetpoint = AngleEncoderValue;
     }
     m_AngleHoldPid.SetSetpoint( m_angleSetpoint );
 
@@ -671,14 +676,9 @@ class Robot : public frc::TimedRobot {
       m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
     }
 
-
-    if ( RotateClawCW )
+    if ( fabs( RotateClawValue ) > 0.1 )
     {
-      m_ClawRotate.Set( 1.0 );
-    }
-    else if ( RotateClawCCW )
-    {
-      m_ClawRotate.Set( -1.0 );
+      m_ClawRotate.Set( RotateClawValue );
     }
     else
     {
