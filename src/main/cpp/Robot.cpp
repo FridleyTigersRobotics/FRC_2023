@@ -806,7 +806,6 @@ void Robot::Subsystem_AngleUpdate() {
 
   if ( !m_angleTopLimit.Get() )
   {
-    linActLeftValue = std::clamp( linActLeftValue, -1.0, 0.0 );
     // TODO: Adjust this value. It should be the encoder value at top limit when calibrated from the bottom. 
     m_angleEncoder.Set( -1400 );       
   }
