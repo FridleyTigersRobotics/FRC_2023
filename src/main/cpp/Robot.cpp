@@ -320,13 +320,11 @@ class Robot : public frc::TimedRobot {
 
 
  public:
-
+  void SetLiftSetpoints(lift_position_t liftPosition);
   void Subsystem_AngleUpdate();
   void Subsystem_LiftUpdate();
   void Subsystem_ClawUpdate();
-  void SetLiftSetpoints(
-    lift_position_t liftPosition
-  );
+
 
   void RobotInit() override {
     // We need to invert one side of the drivetrain so that positive voltages
@@ -602,191 +600,6 @@ class Robot : public frc::TimedRobot {
     Subsystem_ClawUpdate();
   }
 
-
-
-
-  void SetLiftSetpoints(
-    lift_position_t liftPosition
-  )
-  {
-    switch ( liftPosition )
-    {
-      case LIFT_POSITION_STARTING_CONFIG:
-      {
-        m_angleSetpoint     = -1400;
-        m_winchLiftSetpoint = 0;
-        break;
-      }      
-
-      case LIFT_POSITION_DRIVING:
-      {
-        m_angleSetpoint     = -400;
-        m_winchLiftSetpoint = 0;
-        break;
-      }
-
-      case LIFT_POSITION_LOW_GOAL:
-      {
-        m_angleSetpoint     = -700;
-        m_winchLiftSetpoint = 110000;
-        break;
-      }
-
-      case LIFT_POSITION_HIGH_GOAL:
-      {
-        m_angleSetpoint     = -700;
-        m_winchLiftSetpoint = 180000;
-        break;
-      }
-
-      case LIFT_POSITION_CUBE:  
-      {
-        m_angleSetpoint     = -70;
-        m_winchLiftSetpoint = 0;
-        break;
-      }
-
-      case LIFT_POSITION_GROUND:  
-      {
-        m_angleSetpoint     = 2000;
-        m_winchLiftSetpoint = 0;
-        break;
-      }
-
-      case LIFT_POSITION_HOLD:  
-      default:
-      {
-        break;
-      }
-    }
-
-
-
-
-  void Subsystem_ClawUpdate() {
-    if ( m_clawState == CLAW_STATE_OPEN )
-    {
-      m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
-    }
-    else if ( m_clawState == CLAW_STATE_CLOSE )
-    {
-      m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
-    }
-    else
-    {
-      m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
-    }
-
-    if ( fabs( m_rotateClawValue ) > 0.1 )
-    {
-      m_ClawRotate.Set( m_rotateClawValue );
-    }
-    else
-    {
-      m_ClawRotate.Set( 0.0 );
-    }
-  }
-
-
-
-
-  void Subsystem_LiftUpdate() {
-    double liftMotorValue = 0.0;
-    int WinchLiftEncoderValue = m_liftencoder.Get();
-
-    if ( m_liftLimitBot.Get() )
-    {
-      m_WinchEncoderCalibrated = true;
-    }
-
-    liftMotorValue = m_LiftHoldPid.Calculate( WinchLiftEncoderValue );
-    liftMotorValue = std::clamp( liftMotorValue, -0.7, 0.5);
-
-    if ( m_liftLimitBot.Get() )
-    {
-      m_liftencoder.Reset();
-      liftMotorValue = std::clamp( liftMotorValue, 0.0, 0.5);
-    }
-    if ( m_liftLimitTop.Get() )
-    {
-      //m_LiftHoldPid.SetSetpoint( WinchLiftEncoderValue ); // prevents bouncing off the top switch
-      liftMotorValue = std::clamp( liftMotorValue, -0.5, 0.0);
-    }
-
-    if ( m_WinchEncoderCalibrated == false )
-    {
-      liftMotorValue = -0.2;
-    }
-
-    frc::SmartDashboard::PutNumber("LIFT_m_LiftHoldPid.GetSetpoint()",  m_LiftHoldPid.GetSetpoint());
-    frc::SmartDashboard::PutNumber("LIFT_WinchLiftEncoderValue",        WinchLiftEncoderValue);
-    frc::SmartDashboard::PutNumber("LIFT_liftMotorValue",               liftMotorValue  );
-
-    m_Lift.Set( liftMotorValue );
-
-    if ( m_winchLiftSetpoint   > 170000 || 
-         WinchLiftEncoderValue > 170000 || 
-         m_liftLimitTop.Get() )
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
-    }
-    else
-    {
-      m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
-    }
-  }
-
-
-
-
-  void Subsystem_AngleUpdate() {
-    double linActRightValue = 0.0;
-    double linActLeftValue  = 0.0;
-    int angleValue = -m_angleEncoder.GetValue();
-    double motorVal = m_AngleHoldPid.Calculate( m_angleEncoder.GetValue() );
-
-    linActLeftValue = motorVal;
-    linActRightValue = motorVal;
-    
-    if ( !m_bottomLimitRight.Get() )
-    {
-      linActRightValue = std::clamp( linActRightValue, -1.0, 0.0 );
-      m_angleEncoder.Reset();        
-    }
-
-    if ( !m_bottomLimitLeft.Get() )
-    {
-      linActLeftValue = std::clamp( linActLeftValue, -1.0, 0.0 );
-      m_angleEncoder.Reset();        
-    }
-
-    if ( !m_bottomLimitLeft.Get() && !m_bottomLimitRight.Get() )
-    {
-      m_AngleLimitsSet = true;
-    }
-
-    if ( angleValue < -1000 || m_AngleLimitsSet == false )
-    {
-      linActRightValue = std::clamp( linActRightValue, 0.0, 1.0 );
-      linActLeftValue  = std::clamp( linActLeftValue,  0.0, 1.0 );
-    }
-
-    m_LinActRight.Set( linActRightValue );
-    m_LinActLeft.Set( linActLeftValue );
-
-    frc::SmartDashboard::PutNumber("ANGLE_motorVal",                     motorVal);
-    frc::SmartDashboard::PutNumber("ANGLE_m_AngleHoldPid.GetSetpoint()", m_AngleHoldPid.GetSetpoint());
-    frc::SmartDashboard::PutNumber("ANGLE_m_angleEncoder.GetValue()",    m_angleEncoder.GetValue());
-    frc::SmartDashboard::PutNumber("ANGLE_linActRightValue",             linActRightValue);
-    frc::SmartDashboard::PutNumber("ANGLE_linActLeftValue",              linActLeftValue);
-  }
-
-
-
-
-
-
-
   void AutonomousInit() override {
     m_imu.Reset();
     m_autoTimer.Stop();
@@ -832,8 +645,191 @@ class Robot : public frc::TimedRobot {
       return true;
     }
   }
-
 };
+
+
+
+void Robot::SetLiftSetpoints(
+  lift_position_t liftPosition
+)
+{
+  switch ( liftPosition )
+  {
+    case LIFT_POSITION_STARTING_CONFIG:
+    {
+      m_angleSetpoint     = -1400;
+      m_winchLiftSetpoint = 0;
+      break;
+    }      
+
+    case LIFT_POSITION_DRIVING:
+    {
+      m_angleSetpoint     = -400;
+      m_winchLiftSetpoint = 0;
+      break;
+    }
+
+    case LIFT_POSITION_LOW_GOAL:
+    {
+      m_angleSetpoint     = -700;
+      m_winchLiftSetpoint = 110000;
+      break;
+    }
+
+    case LIFT_POSITION_HIGH_GOAL:
+    {
+      m_angleSetpoint     = -700;
+      m_winchLiftSetpoint = 180000;
+      break;
+    }
+
+    case LIFT_POSITION_CUBE:  
+    {
+      m_angleSetpoint     = -70;
+      m_winchLiftSetpoint = 0;
+      break;
+    }
+
+    case LIFT_POSITION_GROUND:  
+    {
+      m_angleSetpoint     = 2000;
+      m_winchLiftSetpoint = 0;
+      break;
+    }
+
+    case LIFT_POSITION_HOLD:  
+    default:
+    {
+      break;
+    }
+  }
+}
+
+
+
+
+void Robot::Subsystem_ClawUpdate() {
+  if ( m_clawState == CLAW_STATE_OPEN )
+  {
+    m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
+  }
+  else if ( m_clawState == CLAW_STATE_CLOSE )
+  {
+    m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
+  }
+  else
+  {
+    m_clawSolenoid.Set(frc::DoubleSolenoid::Value::kOff);
+  }
+
+  if ( fabs( m_rotateClawValue ) > 0.1 )
+  {
+    m_ClawRotate.Set( m_rotateClawValue );
+  }
+  else
+  {
+    m_ClawRotate.Set( 0.0 );
+  }
+}
+
+
+
+
+void Robot::Subsystem_LiftUpdate() {
+  double liftMotorValue = 0.0;
+  int WinchLiftEncoderValue = m_liftencoder.Get();
+
+  if ( m_liftLimitBot.Get() )
+  {
+    m_WinchEncoderCalibrated = true;
+  }
+
+  liftMotorValue = m_LiftHoldPid.Calculate( WinchLiftEncoderValue );
+  liftMotorValue = std::clamp( liftMotorValue, -0.7, 0.5);
+
+  if ( m_liftLimitBot.Get() )
+  {
+    m_liftencoder.Reset();
+    liftMotorValue = std::clamp( liftMotorValue, 0.0, 0.5);
+  }
+  if ( m_liftLimitTop.Get() )
+  {
+    //m_LiftHoldPid.SetSetpoint( WinchLiftEncoderValue ); // prevents bouncing off the top switch
+    liftMotorValue = std::clamp( liftMotorValue, -0.5, 0.0);
+  }
+
+  if ( m_WinchEncoderCalibrated == false )
+  {
+    liftMotorValue = -0.2;
+  }
+
+  frc::SmartDashboard::PutNumber("LIFT_m_LiftHoldPid.GetSetpoint()",  m_LiftHoldPid.GetSetpoint());
+  frc::SmartDashboard::PutNumber("LIFT_WinchLiftEncoderValue",        WinchLiftEncoderValue);
+  frc::SmartDashboard::PutNumber("LIFT_liftMotorValue",               liftMotorValue  );
+
+  m_Lift.Set( liftMotorValue );
+
+  if ( m_winchLiftSetpoint   > 170000 || 
+        WinchLiftEncoderValue > 170000 || 
+        m_liftLimitTop.Get() )
+  {
+    m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
+  }
+  else
+  {
+    m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
+  }
+}
+
+
+
+
+void Robot::Subsystem_AngleUpdate() {
+  double linActRightValue = 0.0;
+  double linActLeftValue  = 0.0;
+  int angleValue = -m_angleEncoder.GetValue();
+  double motorVal = m_AngleHoldPid.Calculate( m_angleEncoder.GetValue() );
+
+  linActLeftValue = motorVal;
+  linActRightValue = motorVal;
+  
+  if ( !m_bottomLimitRight.Get() )
+  {
+    linActRightValue = std::clamp( linActRightValue, -1.0, 0.0 );
+    m_angleEncoder.Reset();        
+  }
+
+  if ( !m_bottomLimitLeft.Get() )
+  {
+    linActLeftValue = std::clamp( linActLeftValue, -1.0, 0.0 );
+    m_angleEncoder.Reset();        
+  }
+
+  if ( !m_bottomLimitLeft.Get() && !m_bottomLimitRight.Get() )
+  {
+    m_AngleLimitsSet = true;
+  }
+
+  if ( angleValue < -1000 || m_AngleLimitsSet == false )
+  {
+    linActRightValue = std::clamp( linActRightValue, 0.0, 1.0 );
+    linActLeftValue  = std::clamp( linActLeftValue,  0.0, 1.0 );
+  }
+
+  m_LinActRight.Set( linActRightValue );
+  m_LinActLeft.Set( linActLeftValue );
+
+  frc::SmartDashboard::PutNumber("ANGLE_motorVal",                     motorVal);
+  frc::SmartDashboard::PutNumber("ANGLE_m_AngleHoldPid.GetSetpoint()", m_AngleHoldPid.GetSetpoint());
+  frc::SmartDashboard::PutNumber("ANGLE_m_angleEncoder.GetValue()",    m_angleEncoder.GetValue());
+  frc::SmartDashboard::PutNumber("ANGLE_linActRightValue",             linActRightValue);
+  frc::SmartDashboard::PutNumber("ANGLE_linActLeftValue",              linActLeftValue);
+}
+
+
+
+
+
 
 
 #ifndef RUNNING_FRC_TESTS
