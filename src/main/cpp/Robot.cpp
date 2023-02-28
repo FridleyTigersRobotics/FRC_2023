@@ -247,8 +247,8 @@ class Robot : public frc::TimedRobot {
 
 
   // PIDs
-  double const kRotateGyroP{ 0.0100 };
-  double const kRotateGyroI{ 0.0000 };
+  double const kRotateGyroP{ 0.0200 };
+  double const kRotateGyroI{ 0.0011 };
   double const kRotateGyroD{ 0.0000 };
   frc2::PIDController m_rotateGyroPid{ kRotateGyroP, kRotateGyroI, kRotateGyroD };
 
@@ -442,19 +442,22 @@ class Robot : public frc::TimedRobot {
 
   void TeleopInit() override {
     m_angleEncoder.Reset();
+    m_liftencoder.Reset();
     m_clawEncoder.Update();
     m_leftencoder.Reset();
     m_rightencoder.Reset();
     m_balancePid.Reset();
     m_balancePid.SetSetpoint( 0.0 );
     m_ClawRotatePid.Reset();
-    m_WinchEncoderCalibrated = false;
     m_liftencoder.Reset();
     m_LiftHoldPid.Reset();
     m_LiftHoldPid.Reset();
     m_AngleHoldPid.Reset();
     m_angleSetpoint     = m_angleEncoder.GetValue();
     m_winchLiftSetpoint = m_liftencoder.Get();
+    m_WinchEncoderCalibrated = false;
+    m_AngleLimitsSet    = false;
+    m_rotateClawValue   = 0;
   }
 
 
@@ -468,8 +471,10 @@ class Robot : public frc::TimedRobot {
     m_autoSelected = m_autoChooser.GetSelected();
     fmt::print("Auto selected: {}\n", m_autoSelected);
 
-    m_autoState = 0;
     m_initState = true;
+    m_autoState = 0; 
+    m_initialAngle = 0;
+    m_rotateGyroPid.SetTolerance(3.0);
   }
 
 
@@ -526,6 +531,7 @@ class Robot : public frc::TimedRobot {
       liftPosition = LIFT_POSITION_STARTING_CONFIG;
     }
 
+    //fmt::print( "ManualWinchLiftUp {}\n", ManualWinchLiftUp );
     SetLiftSetpoints( liftPosition );
 
 
@@ -580,6 +586,9 @@ class Robot : public frc::TimedRobot {
       // If manual control has ended stay at the current position.
       m_winchLiftSetpoint = WinchLiftEncoderValue;
     }
+
+    //fmt::print( "m_winchLiftSetpoint {}\n", m_winchLiftSetpoint );
+
     m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
 
     // ------------------------------------------------------------------------
@@ -624,17 +633,15 @@ class Robot : public frc::TimedRobot {
     // ------------------------------------------------------------------------
     //  Subsystem Updates
     // ------------------------------------------------------------------------
+    Subsystem_AngleUpdate();
+    Subsystem_LiftUpdate();
+    Subsystem_ClawUpdate();
 
   }
 
 
 
   void AutonomousPeriodic() override {
-
-    Subsystem_AngleUpdate();
-    Subsystem_LiftUpdate();
-    Subsystem_ClawUpdate();
-
     if (m_autoSelected == kAutoDrive) 
     {
       RunDriveAuto( );
@@ -643,6 +650,15 @@ class Robot : public frc::TimedRobot {
     {
       RunPlaceAndDriveAuto( );
     }
+
+    m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
+    m_AngleHoldPid.SetSetpoint( m_angleSetpoint );
+
+
+    Subsystem_AngleUpdate();
+    Subsystem_LiftUpdate();
+    Subsystem_ClawUpdate();
+
   }
 };
 
@@ -670,14 +686,14 @@ void Robot::SetLiftSetpoints(
 
     case LIFT_POSITION_LOW_GOAL:
     {
-      m_angleSetpoint     = -700;
+      m_angleSetpoint     = -900;
       m_winchLiftSetpoint = 110000;
       break;
     }
 
     case LIFT_POSITION_HIGH_GOAL:
     {
-      m_angleSetpoint     = -700;
+      m_angleSetpoint     = -900;
       m_winchLiftSetpoint = 180000;
       break;
     }
@@ -738,14 +754,21 @@ void Robot::Subsystem_LiftUpdate() {
   double liftMotorValue = 0.0;
   int WinchLiftEncoderValue = m_liftencoder.Get();
 
+  //fmt::print( "WinchLiftEncoderValue {}\n", WinchLiftEncoderValue );
+
+
   if ( m_liftLimitBot.Get() )
   {
     m_WinchEncoderCalibrated = true;
   }
 
+  //fmt::print( "m_WinchEncoderCalibrated {}\n", m_WinchEncoderCalibrated );
+
   liftMotorValue = m_LiftHoldPid.Calculate( WinchLiftEncoderValue );
   liftMotorValue = std::clamp( liftMotorValue, -0.7, 0.5);
 
+  //fmt::print( "m_liftLimitBot.Get() {}\n", m_liftLimitBot.Get() );
+  //fmt::print( "m_liftLimitTop.Get() {}\n", m_liftLimitTop.Get() );
   if ( m_liftLimitBot.Get() )
   {
     m_liftencoder.Reset();
@@ -762,10 +785,12 @@ void Robot::Subsystem_LiftUpdate() {
     liftMotorValue = -0.2;
   }
 
-  frc::SmartDashboard::PutNumber("LIFT_m_LiftHoldPid.GetSetpoint()",  m_LiftHoldPid.GetSetpoint());
-  frc::SmartDashboard::PutNumber("LIFT_WinchLiftEncoderValue",        WinchLiftEncoderValue);
-  frc::SmartDashboard::PutNumber("LIFT_liftMotorValue",               liftMotorValue  );
-
+  frc::SmartDashboard::PutNumber("LIFT0_m_LiftHoldPid.GetSetpoint()",  m_LiftHoldPid.GetSetpoint());
+  frc::SmartDashboard::PutNumber("LIFT1_WinchLiftEncoderValue",        WinchLiftEncoderValue);
+  frc::SmartDashboard::PutNumber("LIFT2_m_winchLiftSetpoint",          m_winchLiftSetpoint  );
+  frc::SmartDashboard::PutNumber("LIFT3_m_liftLimitTop.Get()",         m_liftLimitTop.Get()  );
+  frc::SmartDashboard::PutNumber("LIFT4_liftMotorValue",               liftMotorValue  );
+  //fmt::print( "liftMotorValue {}\n", liftMotorValue );
   m_Lift.Set( liftMotorValue );
 
   if ( m_winchLiftSetpoint   > 170000 || 
@@ -804,10 +829,12 @@ void Robot::Subsystem_AngleUpdate() {
     m_angleEncoder.Reset();        
   }
 
-  if ( !m_angleTopLimit.Get() )
+  if ( !m_AngleLimitsSet && !m_angleTopLimit.Get() )
   {
     // TODO: Adjust this value. It should be the encoder value at top limit when calibrated from the bottom. 
     m_angleEncoder.Set( -1400 );       
+    m_angleSetpoint = m_angleEncoder.GetValue();
+    m_AngleHoldPid.SetSetpoint( m_angleSetpoint );
   }
 
   if ( ( !m_bottomLimitLeft.Get() && !m_bottomLimitRight.Get() ) || 
@@ -830,6 +857,9 @@ void Robot::Subsystem_AngleUpdate() {
   frc::SmartDashboard::PutNumber("ANGLE_m_angleEncoder.GetValue()",    m_angleEncoder.GetValue());
   frc::SmartDashboard::PutNumber("ANGLE_linActRightValue",             linActRightValue);
   frc::SmartDashboard::PutNumber("ANGLE_linActLeftValue",              linActLeftValue);
+  frc::SmartDashboard::PutNumber("ANGLE_m_bottomLimitLeft",            m_bottomLimitLeft.Get());
+  frc::SmartDashboard::PutNumber("ANGLE_m_bottomLimitRight",           m_bottomLimitRight.Get());
+  frc::SmartDashboard::PutNumber("ANGLE_m_angleTopLimit",              m_angleTopLimit.Get());
 }
 
 
@@ -905,7 +935,7 @@ void Robot::Subsystem_AngleUpdate() {
 
     if ( stateDone )
     {
-      fmt::print( "stateDone {}\n", m_autoState );
+      //fmt::print( "stateDone {}\n", m_autoState );
       m_autoState++;
       m_initState = true;
     }
@@ -930,6 +960,7 @@ void Robot::Subsystem_AngleUpdate() {
           m_initialAngle = m_imu.GetAngle();
           SetLiftSetpoints( LIFT_POSITION_HIGH_GOAL );
         }
+        SetLiftSetpoints( LIFT_POSITION_HIGH_GOAL );
         stateDone = m_autoTimer.Get() > (units::time::second_t)3.0;
         m_robotDrive.ArcadeDrive(0,0);
         break;
@@ -1019,7 +1050,7 @@ void Robot::Subsystem_AngleUpdate() {
 
     if ( stateDone )
     {
-      fmt::print( "stateDone {}\n", m_autoState );
+      //fmt::print( "stateDone {}\n", m_autoState );
       m_autoState++;
       m_initState = true;
     }
