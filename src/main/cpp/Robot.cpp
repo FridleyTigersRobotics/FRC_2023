@@ -268,7 +268,7 @@ class Robot : public frc::TimedRobot {
   double kLiftHoldD{ 0.00 };
   frc::PIDController m_LiftHoldPid{ kLiftHoldP, kLiftHoldI, kLiftHoldD };
 
-  double kAngleHoldP{ 0.01 };
+  double kAngleHoldP{ 0.008 };
   double kAngleHoldI{ 0.00 };
   double kAngleHoldD{ 0.00 };
   frc::PIDController m_AngleHoldPid{ kAngleHoldP, kAngleHoldI, kAngleHoldD };
@@ -303,6 +303,7 @@ class Robot : public frc::TimedRobot {
   bool         m_initState{true};
   unsigned int m_autoState{0}; 
   double       m_initialAngle{0};
+  int          m_atRotateSetpointCount{0};
 
   AccelerationLimiter m_DriveSpeedAccelerationLimiter   { 0.1 };
   AccelerationLimiter m_DriveRotationAccelerationLimiter{ 0.1 };
@@ -475,6 +476,7 @@ class Robot : public frc::TimedRobot {
     m_autoState = 0; 
     m_initialAngle = 0;
     m_rotateGyroPid.SetTolerance(3.0);
+    m_atRotateSetpointCount = 0;
   }
 
 
@@ -693,8 +695,8 @@ void Robot::SetLiftSetpoints(
 
     case LIFT_POSITION_HIGH_GOAL:
     {
-      m_angleSetpoint     = -900;
-      m_winchLiftSetpoint = 180000;
+      m_angleSetpoint     = -850;
+      m_winchLiftSetpoint = 190000;
       break;
     }
 
@@ -849,6 +851,13 @@ void Robot::Subsystem_AngleUpdate() {
     linActLeftValue  = std::clamp( linActLeftValue,  0.0, 1.0 );
   }
 
+  if ( fabs( m_AngleHoldPid.GetPositionError() ) < 70 )
+  {
+    linActRightValue = 0;
+    linActLeftValue = 0;
+  }
+
+
   m_LinActRight.Set( linActRightValue );
   m_LinActLeft.Set( linActLeftValue );
 
@@ -872,11 +881,17 @@ void Robot::Subsystem_AngleUpdate() {
 
     if ( m_rotateGyroPid.AtSetpoint() )
     {
-      m_robotDrive.ArcadeDrive(0,0);
+      m_atRotateSetpointCount++;
+      if ( m_atRotateSetpointCount > 5 )
+      {
+        m_robotDrive.ArcadeDrive(0,0);
+      }
+
       return true;
     }
     else
     {
+      m_atRotateSetpointCount = 0;
       m_robotDrive.ArcadeDrive(0,-rotationSpeed);
       return false;
     }
@@ -989,7 +1004,7 @@ void Robot::Subsystem_AngleUpdate() {
           m_autoTimer.Reset();
           m_autoTimer.Start();
           m_initialAngle = m_imu.GetAngle();
-          SetLiftSetpoints( LIFT_POSITION_DRIVING );
+          SetLiftSetpoints( LIFT_POSITION_LOW_GOAL );
         }
         stateDone = m_autoTimer.Get() > (units::time::second_t)2.0;
         m_robotDrive.ArcadeDrive(0,0);
@@ -1004,8 +1019,10 @@ void Robot::Subsystem_AngleUpdate() {
           m_autoTimer.Reset();
           m_autoTimer.Start();
           m_initialAngle = m_imu.GetAngle();
+          SetLiftSetpoints( LIFT_POSITION_DRIVING );
         }
-        stateDone = DriveForTime( -0.5, 1, m_initialAngle );
+        stateDone = m_autoTimer.Get() > (units::time::second_t)2.0;
+        m_robotDrive.ArcadeDrive(0,0);
         break;
       }
 
@@ -1018,11 +1035,24 @@ void Robot::Subsystem_AngleUpdate() {
           m_autoTimer.Start();
           m_initialAngle = m_imu.GetAngle();
         }
+        stateDone = DriveForTime( -0.5, 1, m_initialAngle );
+        break;
+      }
+
+      case 5:
+      {
+        if ( m_initState )
+        {
+          m_autoTimer.Stop();
+          m_autoTimer.Reset();
+          m_autoTimer.Start();
+          m_initialAngle = m_imu.GetAngle();
+        }
         stateDone = RotateDegrees( 180.0 );
         break;
       }
     
-      case 5:
+      case 6:
       {
         if ( m_initState )
         {
