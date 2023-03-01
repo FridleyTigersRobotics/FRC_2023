@@ -795,9 +795,8 @@ void Robot::Subsystem_LiftUpdate() {
   //fmt::print( "liftMotorValue {}\n", liftMotorValue );
   m_Lift.Set( liftMotorValue );
 
-  if ( m_winchLiftSetpoint   > 170000 || 
-        WinchLiftEncoderValue > 170000 || 
-        m_liftLimitTop.Get() )
+  if ( ( WinchLiftEncoderValue > 170000 ) &&
+       ( m_angleEncoder.GetValue() < -800 ) )
   {
     m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
   }
