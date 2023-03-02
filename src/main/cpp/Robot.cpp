@@ -756,21 +756,21 @@ void Robot::Subsystem_LiftUpdate() {
   double liftMotorValue = 0.0;
   int WinchLiftEncoderValue = m_liftencoder.Get();
 
-  //fmt::print( "WinchLiftEncoderValue {}\n", WinchLiftEncoderValue );
-
+  // TODO : Test this limit is adequate.
+  if ( m_angleEncoder.GetValue() < -1100 )  
+  {
+    m_winchLiftSetpoint = 0;
+    m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
+  }
 
   if ( m_liftLimitBot.Get() )
   {
     m_WinchEncoderCalibrated = true;
   }
 
-  //fmt::print( "m_WinchEncoderCalibrated {}\n", m_WinchEncoderCalibrated );
-
   liftMotorValue = m_LiftHoldPid.Calculate( WinchLiftEncoderValue );
   liftMotorValue = std::clamp( liftMotorValue, -0.7, 0.5);
 
-  //fmt::print( "m_liftLimitBot.Get() {}\n", m_liftLimitBot.Get() );
-  //fmt::print( "m_liftLimitTop.Get() {}\n", m_liftLimitTop.Get() );
   if ( m_liftLimitBot.Get() )
   {
     m_liftencoder.Reset();
@@ -792,16 +792,20 @@ void Robot::Subsystem_LiftUpdate() {
   frc::SmartDashboard::PutNumber("LIFT2_m_winchLiftSetpoint",          m_winchLiftSetpoint  );
   frc::SmartDashboard::PutNumber("LIFT3_m_liftLimitTop.Get()",         m_liftLimitTop.Get()  );
   frc::SmartDashboard::PutNumber("LIFT4_liftMotorValue",               liftMotorValue  );
-  //fmt::print( "liftMotorValue {}\n", liftMotorValue );
+
   m_Lift.Set( liftMotorValue );
 
+  // TODO : Test this limit is adequate.
   if ( ( WinchLiftEncoderValue > 170000 ) &&
-       ( m_angleEncoder.GetValue() < -800 ) )
+       ( m_angleEncoder.GetValue() < -800 ) &&
+       ( m_angleEncoder.GetValue() > -1100 ) )
   {
+    // Extend
     m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kForward);
   }
   else
   {
+    // Contract
     m_liftSolenoid.Set(frc::DoubleSolenoid::Value::kReverse);
   }
 }
