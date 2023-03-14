@@ -308,12 +308,16 @@ class Robot : public frc::TimedRobot {
   // Other
   frc::Timer m_autoTimer;
   std::string          m_autoSelected;
-  const std::string    kAutoNameDefault     = "Default";
+  const std::string    kAutoNameDefault     = "DO NOTHING";
   const std::string    kAutoDrive           = "Drive";
   const std::string    kAutoPlaceAndDrive   = "PlaceAndDrive";
   const std::string    kAutoDriveAndBalance = "DriveAndBalance";
+  const std::string    kAutoPlaceAndBalance = "PlaceAndBalance";
+
+
   frc::SendableChooser<std::string> m_autoChooser;
 
+  int          m_autoSequence{0};
   bool         m_initState{true};
   unsigned int m_autoState{0}; 
   double       m_initialAngle{0};
@@ -347,9 +351,10 @@ class Robot : public frc::TimedRobot {
   void Subsystem_ClawUpdate();
 
   // Auto Sequences
-  void RunDriveAuto();
-  void RunPlaceAndDriveAuto();
-  void RunDriveAndBalanceAuto();
+  bool RunDriveAuto();
+  bool RunPlaceAuto();
+  bool RunDriveAndBalanceAuto();
+  void PlaceAndBalance( );
 
   // Auto functions
   bool RotateDegrees( double angle );
@@ -371,6 +376,7 @@ class Robot : public frc::TimedRobot {
     m_autoChooser.AddOption       ( kAutoDrive,           kAutoDrive         );
     m_autoChooser.AddOption       ( kAutoPlaceAndDrive,   kAutoPlaceAndDrive );
     m_autoChooser.AddOption       ( kAutoDriveAndBalance, kAutoDriveAndBalance );
+    m_autoChooser.AddOption       ( kAutoPlaceAndBalance, kAutoPlaceAndBalance );
 
     frc::SmartDashboard::PutData("Auto Modes", &m_autoChooser);
 
@@ -393,6 +399,8 @@ class Robot : public frc::TimedRobot {
     frc::SmartDashboard::PutNumber("m_liftLimitTop",     m_liftLimitTop.Get());
     frc::SmartDashboard::PutNumber("m_liftLimitBot",     m_liftLimitBot.Get());
 
+    frc::SmartDashboard::PutNumber("IMU_ROLL",     m_imu.GetRoll());
+//m_imu.GetRoll()
     frc::SmartDashboard::PutNumber("m_angleSetpoint",     m_angleSetpoint);
   }
 
@@ -493,6 +501,7 @@ class Robot : public frc::TimedRobot {
     m_autoSelected = m_autoChooser.GetSelected();
     fmt::print("Auto selected: {}\n", m_autoSelected);
 
+    m_autoSequence = 0;
     m_initState = true;
     m_autoState = 0; 
     m_initialAngle = 0;
@@ -674,11 +683,61 @@ class Robot : public frc::TimedRobot {
     }
     else if (m_autoSelected == kAutoPlaceAndDrive)
     {
-      RunPlaceAndDriveAuto( );
+      if ( m_autoSequence == 0 )
+      {
+        if ( RunPlaceAuto( ) == true )
+        {
+          m_autoSequence++;
+          m_autoState = 0;
+          m_initState = true;
+        }
+      }
+      else if ( m_autoSequence == 1 )
+      {
+        if ( RunDriveAuto( ) == true )
+        {
+          m_autoSequence++;
+          m_autoState = 0;
+          m_initState = true;
+        }
+      }
+      else
+      {
+        m_robotDrive.ArcadeDrive(0,0);
+      }
     }
     else if (m_autoSelected == kAutoDriveAndBalance)
     {
       RunDriveAndBalanceAuto( );
+    }
+    else if (m_autoSelected == kAutoPlaceAndBalance)
+    {
+      if ( m_autoSequence == 0 )
+      {
+        if ( RunPlaceAuto( ) == true )
+        {
+          m_autoSequence++;
+          m_autoState = 0;
+          m_initState = true;
+        }
+      }
+      else if ( m_autoSequence == 1 )
+      {
+        if ( RunDriveAndBalanceAuto( ) == true )
+        {
+          m_autoSequence++;
+          m_autoState = 0;
+          m_initState = true;
+        }
+      }
+      else
+      {
+        m_robotDrive.ArcadeDrive(0,0);
+      }
+    }
+    else
+    {
+      m_robotDrive.ArcadeDrive(0,0);
     }
 
     m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
@@ -972,7 +1031,7 @@ void Robot::Subsystem_AngleUpdate() {
   bool Robot::DriveUntilTilted( double speed, double maxTime )
   {
     if ( ( m_autoTimer.Get() < (units::time::second_t)maxTime ) ||
-         ( fabs( m_imu.GetRoll() ) > 10.0 ) )
+         ( fabs( m_imu.GetRoll() ) < 7.0 ) )
     {
       m_robotDrive.ArcadeDrive(speed,0);
       return false;
@@ -989,8 +1048,9 @@ void Robot::Subsystem_AngleUpdate() {
 
 
 
-  void Robot::RunDriveAuto( )
+  bool Robot::RunDriveAuto( )
   {
+    bool sequenceDone = false;
     bool stateDone = false;
 
     switch( m_autoState )
@@ -1004,13 +1064,15 @@ void Robot::Subsystem_AngleUpdate() {
           m_autoTimer.Start();
           m_initialAngle = m_imu.GetAngle();
         }
-        stateDone = DriveForTime( 0.6, 2, m_initialAngle );
+        stateDone = DriveForTime( -0.75, 3.0, m_initialAngle );
         break;
       }
 
       default:
       {
         m_robotDrive.ArcadeDrive(0,0);
+        sequenceDone = true;
+
         // Done, do nothing
         break;
       }
@@ -1027,13 +1089,16 @@ void Robot::Subsystem_AngleUpdate() {
       m_autoState++;
       m_initState = true;
     }
+
+    return sequenceDone;
   }
 
 
 
 
-  void Robot::RunPlaceAndDriveAuto( )
+  bool Robot::RunPlaceAuto( )
   {
+    bool sequenceDone = false;
     bool stateDone = false;
 
     switch( m_autoState )
@@ -1116,22 +1181,11 @@ void Robot::Subsystem_AngleUpdate() {
         break;
       }
 
-      case 5:
-      {
-        if ( m_initState )
-        {
-          m_autoTimer.Stop();
-          m_autoTimer.Reset();
-          m_autoTimer.Start();
-          m_initialAngle = m_imu.GetAngle();
-        }
-        stateDone = DriveForTime( -0.75, 3.0, m_initialAngle );
-        break;
-      }
-
       default:
       {
         m_robotDrive.ArcadeDrive(0,0);
+        sequenceDone = true;
+
         // Done, do nothing
         break;
       }
@@ -1148,6 +1202,8 @@ void Robot::Subsystem_AngleUpdate() {
       m_autoState++;
       m_initState = true;
     }
+
+    return sequenceDone; 
   }
 
 
@@ -1156,7 +1212,96 @@ void Robot::Subsystem_AngleUpdate() {
 
 
 
-  void Robot::RunDriveAndBalanceAuto( )
+  bool Robot::RunDriveAndBalanceAuto( )
+  {
+    bool sequenceDone = false;
+    bool stateDone = false;
+
+    switch( m_autoState )
+    {
+      case 0:
+      {
+        if ( m_initState )
+        {
+          m_autoTimer.Stop();
+          m_autoTimer.Reset();
+          m_autoTimer.Start();
+          m_initialAngle = m_imu.GetAngle();
+        }
+        stateDone = DriveUntilTilted( -0.70, 2.5 );
+        break;
+      }
+
+      case 1:
+      {
+        if ( m_initState )
+        {
+          m_autoTimer.Stop();
+          m_autoTimer.Reset();
+          m_autoTimer.Start();
+          m_initialAngle = m_imu.GetAngle();
+        }
+        stateDone = DriveForTime( -0.70, 1.0, m_initialAngle );
+        break;
+      }
+
+      case 2:
+      {
+        if ( m_initState )
+        {
+          m_autoTimer.Stop();
+          m_autoTimer.Reset();
+          m_autoTimer.Start();
+          m_initialAngle = m_imu.GetAngle();
+        }
+        stateDone = DriveUntilTilted( 0.75, 5 );
+        break;
+      }
+
+      case 3:
+      {
+        if ( m_initState )
+        {
+          m_autoTimer.Stop();
+          m_autoTimer.Reset();
+          m_autoTimer.Start();
+          m_initialAngle = m_imu.GetAngle();
+        }
+        double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
+        pidValue = std::clamp( pidValue, -0.8, 0.8 );
+        m_robotDrive.ArcadeDrive(-pidValue, 0.0);
+        break;
+      }
+
+
+
+      default:
+      {
+        m_robotDrive.ArcadeDrive(0,0);
+        sequenceDone = true;
+
+        // Done, do nothing
+        break;
+      }
+    }
+
+    if ( m_initState )
+    {
+      m_initState = false;
+    }
+
+    if ( stateDone )
+    {
+      //fmt::print( "stateDone {}\n", m_autoState );
+      m_autoState++;
+      m_initState = true;
+    }
+
+    return sequenceDone; 
+  }
+
+
+  void Robot::PlaceAndBalance( )
   {
     bool stateDone = false;
 
@@ -1212,7 +1357,6 @@ void Robot::Subsystem_AngleUpdate() {
       m_initState = true;
     }
   }
-
 
 
 
