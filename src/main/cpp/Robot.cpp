@@ -329,6 +329,8 @@ class Robot : public frc::TimedRobot {
   bool m_PrevManualWinchLiftControlEnabled = false;
   bool m_PrevManualAngleControlEnabled     = false;
 
+  bool m_reverseDrive = false;
+
   typedef enum lift_position_e
   {
     LIFT_POSITION_HOLD,
@@ -488,6 +490,7 @@ class Robot : public frc::TimedRobot {
     m_WinchEncoderCalibrated = false;
     m_AngleLimitsSet    = false;
     m_rotateClawValue   = 0;
+    m_reverseDrive      = false;
   }
 
 
@@ -516,8 +519,9 @@ class Robot : public frc::TimedRobot {
 
 
   void TeleopPeriodic() override {
-    bool SelfBalanceEnable = m_DriveController.GetYButton();
-    bool ToggleClaw        = m_DriveController.GetXButtonPressed();
+    bool SelfBalanceEnable  = false;//m_DriveController.GetYButton();
+    bool SwapDriveDirection = m_DriveController.GetYButtonPressed();
+    bool ToggleClaw         = m_DriveController.GetXButtonPressed();
 
     // Maunal Winch Lift Control
     bool ManualWinchLiftUp              = m_DriveController.GetRightBumper() || m_AuxController.GetRightBumper();
@@ -538,6 +542,10 @@ class Robot : public frc::TimedRobot {
 
     m_rotateClawValue = m_AuxController.GetLeftX();
 
+    if ( SwapDriveDirection )
+    {
+      m_reverseDrive = !m_reverseDrive;
+    }
 
     // Lift Presets
     lift_position_t liftPosition = LIFT_POSITION_HOLD;
@@ -584,6 +592,10 @@ class Robot : public frc::TimedRobot {
     {
       double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( -m_DriveController.GetLeftY() );
       double zRotation = m_DriveRotationAccelerationLimiter.Set( -m_DriveController.GetRightX() );
+      if ( m_reverseDrive )
+      {
+        xSpeed *= -1.0;
+      }
       m_robotDrive.ArcadeDrive( xSpeed, zRotation );
     }
 
@@ -891,7 +903,7 @@ void Robot::Subsystem_LiftUpdate() {
 
   // TODO : Test this limit is adequate.
   if ( ( WinchLiftEncoderValue > 170000 ) &&
-       ( m_angleEncoder.GetValue() < -700 ) &&
+       ( m_angleEncoder.GetValue() < -500 ) &&
        ( m_angleEncoder.GetValue() > -1100 ) )
   {
     // Extend
@@ -931,7 +943,7 @@ void Robot::Subsystem_AngleUpdate() {
   if ( !m_AngleLimitsSet && !m_angleTopLimit.Get() )
   {
     // TODO: Adjust this value. It should be the encoder value at top limit when calibrated from the bottom. 
-    m_angleEncoder.Set( -1400 );       
+    m_angleEncoder.Set( -1300 );       
     m_angleSetpoint = m_angleEncoder.GetValue();
     m_AngleHoldPid.SetSetpoint( m_angleSetpoint );
   }
@@ -1064,7 +1076,7 @@ void Robot::Subsystem_AngleUpdate() {
           m_autoTimer.Start();
           m_initialAngle = m_imu.GetAngle();
         }
-        stateDone = DriveForTime( -0.75, 3.0, m_initialAngle );
+        stateDone = DriveForTime( -0.75, 2.0, m_initialAngle );
         break;
       }
 
