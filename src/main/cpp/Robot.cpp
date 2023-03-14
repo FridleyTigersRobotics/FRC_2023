@@ -38,7 +38,7 @@
 #include <units/length.h>
 #include <units/velocity.h>
 #include <frc/filter/SlewRateLimiter.h>
-
+#include <frc/geometry/Pose2d.h>
 
 class DualChannelAnalogEncoder {
   public:
@@ -395,7 +395,7 @@ class Robot : public frc::TimedRobot {
   // Auto functions
   bool RotateDegrees( double angle );
   bool DriveForTime( double speed, double time, double initialAngle );
-  bool DriveForDistance( double speed, double distance );
+  bool DriveForDistance( double speed, double distance, units::time::second_t maxTime );
   bool DriveUntilTilted( double speed, double maxTime );
 
   void Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds);
@@ -740,6 +740,8 @@ class Robot : public frc::TimedRobot {
 
 
   void AutonomousPeriodic() override {
+    Drivetrain_UpdateOdometry();
+
     if (m_autoSelected == kAutoDrive) 
     {
       RunDriveAuto( );
@@ -1097,13 +1099,14 @@ void Robot::Subsystem_AngleUpdate() {
   }
 
 
-  bool Robot::DriveForDistance( double speed, double distance )
+  bool Robot::DriveForDistance( double speed, double distance, units::time::second_t maxTime=5.0_s )
   {
-    if ( 0 )
+    frc::Pose2d pose = m_odometry.GetPose();
+
+    if ( ( pose.Y()          < 2.0_m ) &&
+         ( m_autoTimer.Get() < maxTime ) )
     {
-      double leftSpeed  = 0;
-      double rightSpeed = 0;
-      m_robotDrive.TankDrive(leftSpeed,rightSpeed);
+      Drivetrain_Drive( 0.5_mps, 0.0_rad_per_s );
       return false;
     }
     else
