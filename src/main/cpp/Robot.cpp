@@ -24,6 +24,21 @@
 #include <frc/PneumaticsControlModule.h>
 #include <frc/DoubleSolenoid.h>
 #include <ctre/phoenix/motorcontrol/can/WPI_VictorSPX.h>
+#include <numbers>
+#include <frc/AnalogGyro.h>
+#include <frc/Encoder.h>
+#include <frc/controller/PIDController.h>
+#include <frc/controller/SimpleMotorFeedforward.h>
+#include <frc/kinematics/DifferentialDriveKinematics.h>
+#include <frc/kinematics/DifferentialDriveOdometry.h>
+#include <frc/motorcontrol/MotorControllerGroup.h>
+#include <frc/motorcontrol/PWMSparkMax.h>
+#include <units/angle.h>
+#include <units/angular_velocity.h>
+#include <units/length.h>
+#include <units/velocity.h>
+#include <frc/filter/SlewRateLimiter.h>
+
 
 class DualChannelAnalogEncoder {
   public:
@@ -217,8 +232,8 @@ class Robot : public frc::TimedRobot {
 
 
   // Digial I/O
-  frc::Encoder      m_leftencoder     { GetDioChannelFromPin(2), GetDioChannelFromPin(3) };
-  frc::Encoder      m_rightencoder    { GetDioChannelFromPin(0), GetDioChannelFromPin(1) };
+  frc::Encoder      m_leftEncoder     { GetDioChannelFromPin(2), GetDioChannelFromPin(3) };
+  frc::Encoder      m_rightEncoder    { GetDioChannelFromPin(0), GetDioChannelFromPin(1) };
   frc::DigitalInput m_bottomLimitLeft { 4 };
   frc::DigitalInput m_bottomLimitRight{ 5 };
   frc::DigitalInput m_angleTopLimit   { 7 };
@@ -244,6 +259,25 @@ class Robot : public frc::TimedRobot {
   frc::MotorControllerGroup m_leftMotors { m_frontleftMotor,  m_rearleftMotor  };
   frc::MotorControllerGroup m_rightMotors{ m_frontrightMotor, m_rearrightMotor };
   frc::DifferentialDrive    m_robotDrive { m_leftMotors,      m_rightMotors    };
+  // TODO: Determine gains.
+  frc::SimpleMotorFeedforward<units::meters> m_feedforward{1_V, 3_V / 1_mps};
+  frc2::PIDController m_leftPIDController {1.0, 0.0, 0.0};
+  frc2::PIDController m_rightPIDController{1.0, 0.0, 0.0};
+  static constexpr units::meter_t kTrackWidth = 0.6858_m;
+  static constexpr double kWheelRadius = 0.0762;  // meters
+  static constexpr int kEncoderResolution = 4096;
+
+  frc::DifferentialDriveKinematics m_kinematics{kTrackWidth};
+  frc::DifferentialDriveOdometry m_odometry{
+    m_imu.GetRotation2d(), 
+    units::meter_t{m_leftEncoder.GetDistance()},
+    units::meter_t{m_rightEncoder.GetDistance()}
+  };
+
+  static constexpr units::meters_per_second_t kMaxSpeed = 3.0_mps;
+  static constexpr units::radians_per_second_t kMaxAngularSpeed{std::numbers::pi}; 
+  frc::SlewRateLimiter<units::scalar> m_speedLimiter{3 / 1_s};
+  frc::SlewRateLimiter<units::scalar> m_rotLimiter{3 / 1_s};
 
 
   // PIDs
@@ -364,13 +398,17 @@ class Robot : public frc::TimedRobot {
   bool DriveForDistance( double speed, double distance );
   bool DriveUntilTilted( double speed, double maxTime );
 
+  void Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds);
+  void Drivetrain_Drive(units::meters_per_second_t xSpeed,
+                        units::radians_per_second_t rot);
+  void Drivetrain_UpdateOdometry();
 
   void RobotInit() override {
     // We need to invert one side of the drivetrain so that positive voltages
     // result in both sides moving forward. Depending on how your robot's
     // gearbox is constructed, you might have to invert the left side instead.
     m_rightMotors.SetInverted(true);
-    m_leftencoder.SetReverseDirection(true); 
+    m_leftEncoder.SetReverseDirection(true); 
     //m_imu.Calibrate();
 
     // Autonomous Chooser
@@ -389,10 +427,10 @@ class Robot : public frc::TimedRobot {
     m_angleEncoder.Update();
     m_clawEncoder.Update();
 
-    frc::SmartDashboard::PutNumber("m_leftencoder",      m_leftencoder.Get());   
-    frc::SmartDashboard::PutNumber("m_rightencoder",     m_rightencoder.Get());
-    frc::SmartDashboard::PutNumber("DRIVE_LeftDistance",      m_leftencoder.GetDistance());   
-    frc::SmartDashboard::PutNumber("DRIVE_RightDistance",     m_rightencoder.GetDistance());
+    frc::SmartDashboard::PutNumber("m_leftEncoder",      m_leftEncoder.Get());   
+    frc::SmartDashboard::PutNumber("m_rightEncoder",     m_rightEncoder.Get());
+    frc::SmartDashboard::PutNumber("DRIVE_LeftDistance",      m_leftEncoder.GetDistance());   
+    frc::SmartDashboard::PutNumber("DRIVE_RightDistance",     m_rightEncoder.GetDistance());
     frc::SmartDashboard::PutNumber("m_bottomLimitLeft",  m_bottomLimitLeft.Get());
     frc::SmartDashboard::PutNumber("m_bottomLimitRight", m_bottomLimitRight.Get());
     frc::SmartDashboard::PutNumber("m_angleEncoder",     m_angleEncoder.GetValue());
@@ -410,8 +448,8 @@ class Robot : public frc::TimedRobot {
   void TestInit() override {
     m_angleEncoder.Reset();
     m_clawEncoder.Update();
-    m_leftencoder.Reset();
-    m_rightencoder.Reset();
+    m_leftEncoder.Reset();
+    m_rightEncoder.Reset();
     m_balancePid.Reset();
     m_balancePid.SetSetpoint( 0.0 );
     m_ClawRotatePid.Reset();
@@ -476,8 +514,8 @@ class Robot : public frc::TimedRobot {
     m_angleEncoder.Reset();
     m_liftencoder.Reset();
     m_clawEncoder.Update();
-    m_leftencoder.Reset();
-    m_rightencoder.Reset();
+    m_leftEncoder.Reset();
+    m_rightEncoder.Reset();
     m_balancePid.Reset();
     m_balancePid.SetSetpoint( 0.0 );
     m_ClawRotatePid.Reset();
@@ -581,6 +619,8 @@ class Robot : public frc::TimedRobot {
     // ------------------------------------------------------------------------
     //  DRIVE CONTROL
     // ------------------------------------------------------------------------
+    Drivetrain_UpdateOdometry();
+
     if ( SelfBalanceEnable )
     {
       double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
@@ -590,14 +630,25 @@ class Robot : public frc::TimedRobot {
     }
     else
     {
-      double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( -m_DriveController.GetLeftY() );
-      double zRotation = m_DriveRotationAccelerationLimiter.Set( -m_DriveController.GetRightX() );
-      if ( m_reverseDrive )
+      if ( true )
       {
-        xSpeed *= -1.0;
+        const auto xSpeed = -m_speedLimiter.Calculate(m_DriveController.GetLeftY()) * kMaxSpeed;
+        const auto rot    = -m_rotLimiter.Calculate(m_DriveController.GetRightX()) * kMaxAngularSpeed;
+        Drivetrain_Drive( xSpeed, rot );
       }
-      m_robotDrive.ArcadeDrive( xSpeed, zRotation );
+      else
+      {
+        double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( -m_DriveController.GetLeftY() );
+        double zRotation = m_DriveRotationAccelerationLimiter.Set( -m_DriveController.GetRightX() );
+        if ( m_reverseDrive )
+        {
+          xSpeed *= -1.0;
+        }
+        m_robotDrive.ArcadeDrive( xSpeed, zRotation );
+      }
     }
+
+
 
     // ------------------------------------------------------------------------
     // Manual Winch Lift Control
@@ -828,6 +879,30 @@ void Robot::SetLiftSetpoints(
   }
 }
 
+
+
+void Robot::Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds) {
+  const auto leftFeedforward = m_feedforward.Calculate(speeds.left);
+  const auto rightFeedforward = m_feedforward.Calculate(speeds.right);
+  const double leftOutput = m_leftPIDController.Calculate(
+      m_leftEncoder.GetRate(), speeds.left.value());
+  const double rightOutput = m_rightPIDController.Calculate(
+      m_rightEncoder.GetRate(), speeds.right.value());
+
+  m_leftMotors.SetVoltage(units::volt_t{leftOutput} + leftFeedforward);
+  m_rightMotors.SetVoltage(units::volt_t{rightOutput} + rightFeedforward);
+}
+
+void Robot::Drivetrain_Drive(units::meters_per_second_t xSpeed,
+                             units::radians_per_second_t rot) {
+  Drivetrain_SetSpeeds(m_kinematics.ToWheelSpeeds({xSpeed, 0_mps, rot}));
+}
+
+void Robot::Drivetrain_UpdateOdometry() {
+  m_odometry.Update(m_imu.GetRotation2d(),
+                    units::meter_t{m_leftEncoder.GetDistance()},
+                    units::meter_t{m_rightEncoder.GetDistance()});
+}
 
 
 
