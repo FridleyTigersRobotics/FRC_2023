@@ -255,8 +255,8 @@ class Robot : public frc::TimedRobot {
 
 
   // User Input Devices
-  frc::XboxController m_DriveController{1};
-  frc::XboxController m_AuxController  {0};
+  frc::XboxController m_DriveController{ 1 };
+  frc::XboxController m_AuxController  { 0 };
 
 
   // Drive System
@@ -269,6 +269,8 @@ class Robot : public frc::TimedRobot {
   static constexpr units::meter_t kTrackWidth        { 0.5358_m };
   static constexpr double         kWheelRadius       { 0.0762 };  // meters
   static constexpr int            kEncoderResolution { 360 };     // pulses puer rev
+  static constexpr double         kDistancePerPulse  { 2.0 * std::numbers::pi * kWheelRadius / kEncoderResolution };
+
 
   frc::DifferentialDriveKinematics m_kinematics{kTrackWidth};
   frc::DifferentialDriveOdometry m_odometry{
@@ -309,16 +311,6 @@ class Robot : public frc::TimedRobot {
   double kAngleHoldD{ 0.00 };
   frc::PIDController m_AngleHoldPid{ kAngleHoldP, kAngleHoldI, kAngleHoldD };
 
-  double kDriveDistLeftP{ 0.08 };
-  double kDriveDistLeftI{ 0.00 };
-  double kDriveDistLeftD{ 0.00 };
-  frc::PIDController m_DriveDistLeftPid{ kDriveDistLeftP, kDriveDistLeftI, kDriveDistLeftD };
-
-  double kDriveDistRightP{ 0.08 };
-  double kDriveDistRightI{ 0.00 };
-  double kDriveDistRightD{ 0.00 };
-  frc::PIDController m_DriveDistRightPid{ kDriveDistRightP, kDriveDistRightI, kDriveDistRightD };
-
 
   // Subsystem States
   bool   m_WinchEncoderCalibrated { false };
@@ -358,8 +350,8 @@ class Robot : public frc::TimedRobot {
   const std::string kAutoPlaceDriveAndBalance { "PlaceDriveAndBalance" };
 
   frc::SendableChooser<std::string> m_autoChooser;
-  frc::Timer        m_autoTimer;
-  std::string       m_autoSelected;
+  frc::Timer   m_autoTimer;
+  std::string  m_autoSelected { kAutoNameDefault };
   int          m_autoSequence { 0 };
   bool         m_initState    { true };
   unsigned int m_autoState    { 0 }; 
@@ -389,37 +381,39 @@ class Robot : public frc::TimedRobot {
 
 
  public:
+
   void SetLiftSetpoints(lift_position_t liftPosition);
+
+  // Subsytem Updates
   void Subsystem_AngleUpdate();
   void Subsystem_LiftUpdate();
   void Subsystem_ClawUpdate();
 
+  void Drivetrain_Stop();
+  void Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds);
+  void Drivetrain_Drive(units::meters_per_second_t xSpeed,
+                        units::radians_per_second_t rot);
+  void Drivetrain_UpdateOdometry();
+
   // Auto Sequences
   bool RunDriveAuto();
   bool RunPlaceAuto();
-  bool RunDriveAndBalanceAuto( bool forwards );
+  bool RunBalanceAuto( bool forwards );
 
   // Auto functions
   bool Balance();
   bool RotateDegrees( double angle );
   bool DriveForDistance( units::meters_per_second_t speed, units::meter_t distance, units::time::second_t maxTime );
 
-  void Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds);
-  void Drivetrain_Drive(units::meters_per_second_t xSpeed,
-                        units::radians_per_second_t rot);
-  void Drivetrain_UpdateOdometry();
-
   void RobotInit() override {
     limelightNetworkTable = nt::NetworkTableInstance::GetDefault().GetTable("limelight");
     // We need to invert one side of the drivetrain so that positive voltages
     // result in both sides moving forward. Depending on how your robot's
     // gearbox is constructed, you might have to invert the left side instead.
-    m_rightMotors.SetInverted(true);
-    m_leftEncoder.SetReverseDirection(true); 
-    m_leftEncoder.SetDistancePerPulse(2 * std::numbers::pi * kWheelRadius /
-                                      kEncoderResolution);
-    m_rightEncoder.SetDistancePerPulse(2 * std::numbers::pi * kWheelRadius /
-                                       kEncoderResolution);
+    m_rightMotors.SetInverted( true );
+    m_leftEncoder.SetReverseDirection( true ); 
+    m_leftEncoder.SetDistancePerPulse( kDistancePerPulse );
+    m_rightEncoder.SetDistancePerPulse( kDistancePerPulse );
 
     // Autonomous Chooser
     m_autoChooser.SetDefaultOption( kAutoNameDefault,     kAutoNameDefault   );
@@ -516,7 +510,6 @@ class Robot : public frc::TimedRobot {
 
 
   void TeleopInit() override {
-    frc::Pose2d pose;
     m_angleEncoder.Reset();
     m_liftencoder.Reset();
     m_clawEncoder.Update();
@@ -535,9 +528,11 @@ class Robot : public frc::TimedRobot {
     m_reverseDrive           = false;
     m_prevAngle              = 0.0;
     m_currentAngle           = 0.0;
-    m_odometry.ResetPosition(m_imu.GetRotation2d(),
-                units::meter_t{m_leftEncoder.GetDistance()},
-                units::meter_t{m_rightEncoder.GetDistance()}, pose);
+    m_odometry.ResetPosition(
+      m_imu.GetRotation2d(),
+      units::meter_t{m_leftEncoder.GetDistance()},
+      units::meter_t{m_rightEncoder.GetDistance()}, 
+      frc::Pose2d{});
   }
 
 
@@ -557,9 +552,6 @@ class Robot : public frc::TimedRobot {
     m_initialAngle = 0;
     m_rotateGyroPid.SetTolerance(3.0);
     m_atRotateSetpointCount = 0;
-
-    m_DriveDistLeftPid.Reset();
-    m_DriveDistRightPid.Reset();
 
     // Need to assume we are in the starting configuration.
     m_angleEncoder.Set( kAngleEncoderTopValue );
@@ -688,11 +680,7 @@ class Robot : public frc::TimedRobot {
         frc::SmartDashboard::PutNumber("DRIVE_xSpeed", (double)xSpeed  );
         frc::SmartDashboard::PutNumber("DRIVE_rot", (double)rot  );
 
-        //xSpeed = (units::meters_per_second_t)0.0;
-        //rot    = (units::radians_per_second_t)0.0;
         Drivetrain_Drive( xSpeed, rot );
-        
-        //Drivetrain_Drive( xSpeed, rot );
       }
       else
       {
@@ -833,18 +821,18 @@ class Robot : public frc::TimedRobot {
       }*/
       else
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
       }
     }
     else if (m_autoSelected == kAutoDriveAndBalance)
     {
-      RunDriveAndBalanceAuto( false );
+      RunBalanceAuto( false );
     }
     else if (m_autoSelected == kAutoPlaceAndBalance)
     {
       if ( m_autoSequence == 0 )
       {
-        if ( RunDriveAndBalanceAuto( false ) == true )
+        if ( RunBalanceAuto( false ) == true )
         {
           m_autoSequence++;
           m_autoState = 0;
@@ -860,7 +848,7 @@ class Robot : public frc::TimedRobot {
       }
       /*else if ( m_autoSequence == 1 )
       {
-        if ( RunDriveAndBalanceAuto( false ) == true )
+        if ( RunBalanceAuto( false ) == true )
         {
           m_autoSequence++;
           m_autoState = 0;
@@ -869,7 +857,7 @@ class Robot : public frc::TimedRobot {
       }*/
       else
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
       }
     }
     else if (m_autoSelected == kAutoPlaceDriveAndBalance)
@@ -894,7 +882,7 @@ class Robot : public frc::TimedRobot {
       }
       else if ( m_autoSequence == 2 )
       {
-        if ( RunDriveAndBalanceAuto( true ) == true )
+        if ( RunBalanceAuto( true ) == true )
         {
           m_autoSequence++;
           m_autoState = 0;
@@ -903,12 +891,12 @@ class Robot : public frc::TimedRobot {
       }
       else
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
       }
     }
     else
     {
-      Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+      Drivetrain_Stop();
     }
 
     m_LiftHoldPid.SetSetpoint( m_winchLiftSetpoint );
@@ -1014,6 +1002,10 @@ void Robot::Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds
 void Robot::Drivetrain_Drive(units::meters_per_second_t xSpeed,
                              units::radians_per_second_t rot) {
   Drivetrain_SetSpeeds(m_kinematics.ToWheelSpeeds({xSpeed, 0_mps, rot}));
+}
+
+void Robot::Drivetrain_Stop() {
+  m_robotDrive.StopMotor();
 }
 
 
@@ -1193,7 +1185,7 @@ void Robot::Subsystem_AngleUpdate() {
 
     if ( m_atRotateSetpointCount > 5 )
     {
-      Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+      Drivetrain_Stop();
       return true;
     }
     else
@@ -1219,14 +1211,14 @@ void Robot::Subsystem_AngleUpdate() {
     }
     else
     {
-      Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+      Drivetrain_Stop();
       return true;
     }
   }
 
 
 
-  bool Robot::RunDriveAndBalanceAuto( bool forwards )
+  bool Robot::RunBalanceAuto( bool forwards )
   {
     frc::Pose2d pose = m_odometry.GetPose();
     bool sequenceDone = false;
@@ -1299,7 +1291,7 @@ void Robot::Subsystem_AngleUpdate() {
 
       default:
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         sequenceDone = true;
 
         // Done, do nothing
@@ -1346,7 +1338,7 @@ void Robot::Subsystem_AngleUpdate() {
 
       default:
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         sequenceDone = true;
 
         // Done, do nothing
@@ -1390,7 +1382,7 @@ void Robot::Subsystem_AngleUpdate() {
         }
         SetLiftSetpoints( LIFT_POSITION_HIGH_GOAL_AUTONOMOUS );
         stateDone = ( m_autoTimer.Get() > (units::time::second_t)3.0 ) || m_liftLimitTop.Get() || (m_LiftHoldPid.AtSetpoint() && m_LiftHoldPid.GetSetpoint() > 1000);
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         break;
       }
 
@@ -1424,7 +1416,7 @@ void Robot::Subsystem_AngleUpdate() {
 
         SetLiftSetpoints( LIFT_POSITION_HIGH_GOAL );
         stateDone = m_autoTimer.Get() > (units::time::second_t)0.4;
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         break;
       }
 
@@ -1439,7 +1431,7 @@ void Robot::Subsystem_AngleUpdate() {
         }
         m_clawState = CLAW_STATE_OPEN;
         stateDone = m_autoTimer.Get() > (units::time::second_t)0.2;
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         break;
       }
 
@@ -1454,7 +1446,7 @@ void Robot::Subsystem_AngleUpdate() {
         }
         SetLiftSetpoints( LIFT_POSITION_LOW_GOAL );
         stateDone = m_autoTimer.Get() > (units::time::second_t)0.5;
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         break;
       }
 
@@ -1469,13 +1461,13 @@ void Robot::Subsystem_AngleUpdate() {
         }
         SetLiftSetpoints( LIFT_POSITION_DRIVING );
         stateDone = m_autoTimer.Get() > (units::time::second_t)0.5;
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         break;
       }
 
       default:
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         sequenceDone = true;
 
         // Done, do nothing
@@ -1502,14 +1494,14 @@ void Robot::Subsystem_AngleUpdate() {
 
 bool Robot::Balance()
 {
-  bool balanced = false;
+  bool   balanced = false;
   double angleChangeThreshold = 0.5;
   m_currentAngle = m_imu.GetRoll();
 
 
   if ( fabs(m_currentAngle) < 3.0  )
   {
-    Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+    Drivetrain_Stop();
     //balanced = true;
   }
   else
@@ -1518,7 +1510,7 @@ bool Robot::Balance()
     {
       if ( ( m_prevAngle - m_currentAngle ) > angleChangeThreshold )
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         //balanced = true;
       }
       else
@@ -1530,7 +1522,7 @@ bool Robot::Balance()
     {
       if ( ( m_prevAngle - m_currentAngle ) < -angleChangeThreshold )
       {
-        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        Drivetrain_Stop();
         //balanced = true;
       }
       else
