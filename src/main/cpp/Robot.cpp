@@ -295,9 +295,9 @@ class Robot : public frc::TimedRobot {
   frc2::PIDController m_rotateLimePid{ kRotateLimeP, kRotateLimeI, kRotateLimeD };
 
 
-  double kBalanceP{ 0.06 };
-  double kBalanceI{ 0.00 };
-  double kBalanceD{ 0.00 };
+  double kBalanceP{ 0.050 };
+  double kBalanceI{ 0.001 };
+  double kBalanceD{ 0.000 };
   frc::PIDController m_balancePid{ kBalanceP, kBalanceI, kBalanceD };
 
 
@@ -349,6 +349,8 @@ class Robot : public frc::TimedRobot {
 
 
   // Other
+  double m_prevAngle = 0;
+  double m_currentAngle = 0;
   frc::Timer m_autoTimer;
   std::string          m_autoSelected;
   const std::string    kAutoNameDefault     = "DO NOTHING";
@@ -374,6 +376,8 @@ class Robot : public frc::TimedRobot {
   bool m_PrevManualAngleControlEnabled     = false;
 
   bool m_reverseDrive = false;
+
+  units::meter_t m_startDistance;
 
   typedef enum lift_position_e
   {
@@ -402,6 +406,7 @@ class Robot : public frc::TimedRobot {
   bool RunDriveAndBalanceAuto( bool forwards );
 
   // Auto functions
+  bool Balance();
   bool RotateDegrees( double angle );
   bool DriveForTime( double speed, double time, double initialAngle );
   bool DriveForDistance( units::meters_per_second_t speed, units::meter_t distance, units::time::second_t maxTime );
@@ -445,6 +450,7 @@ class Robot : public frc::TimedRobot {
     m_LiftHoldPid.SetIntegratorRange( -0.1, 0.1 ); //stops integrator wind-up
     m_LiftHoldPid.SetTolerance( 100 );
     m_rotateLimePid.SetIntegratorRange( -2.0, 2.0 ); //stops integrator wind-up
+    m_balancePid.SetIntegratorRange( -0.4, 0.4 ); //stops integrator wind-up
   }
 
   void RobotPeriodic() override {
@@ -461,6 +467,8 @@ class Robot : public frc::TimedRobot {
 
     frc::SmartDashboard::PutNumber("POSE_X",     (double)pose.X());
     frc::SmartDashboard::PutNumber("POSE_Y",     (double)pose.Y());
+
+
   }
 
 
@@ -553,6 +561,8 @@ class Robot : public frc::TimedRobot {
                     units::meter_t{m_leftEncoder.GetDistance()},
                     units::meter_t{m_rightEncoder.GetDistance()}, pose);
     m_rotateLimePid.Reset();
+    m_prevAngle = 0.0;
+    m_currentAngle = 0.0;
   }
 
 
@@ -1120,7 +1130,7 @@ void Robot::Subsystem_LiftUpdate() {
   frc::SmartDashboard::PutNumber("LIFT4_liftMotorValue",               liftMotorValue  );
 
 
-  fmt::print( "{},{},{},{},{}\n", m_LiftHoldPid.GetPositionError(), m_angleEncoder.GetValue(), m_winchLiftSetpoint, m_LiftHoldPid.GetSetpoint(), WinchLiftEncoderValue, liftMotorValue );
+  //fmt::print( "{},{},{},{},{}\n", m_LiftHoldPid.GetPositionError(), m_angleEncoder.GetValue(), m_winchLiftSetpoint, m_LiftHoldPid.GetSetpoint(), WinchLiftEncoderValue, liftMotorValue );
 
 
   m_Lift.Set( liftMotorValue );
@@ -1251,8 +1261,8 @@ void Robot::Subsystem_AngleUpdate() {
   {
     frc::Pose2d pose = m_odometry.GetPose();
 
-    if ( ( ( ( speed > 0.0_mps ) && ( pose.X() < distance ) ) ||
-           ( ( speed < 0.0_mps ) && ( pose.X() > distance ) ) ) &&
+    if ( ( ( ( speed > 0.0_mps ) && ( (pose.X() - m_startDistance) < distance ) ) ||
+           ( ( speed < 0.0_mps ) && ( (pose.X() - m_startDistance) > distance ) ) ) &&
          ( m_autoTimer.Get() < maxTime ) )
     {
       Drivetrain_Drive( speed, 0.0_rad_per_s );
@@ -1288,6 +1298,7 @@ void Robot::Subsystem_AngleUpdate() {
 
   bool Robot::RunDriveAndBalanceAuto( bool forwards )
   {
+    frc::Pose2d pose = m_odometry.GetPose();
     bool sequenceDone = false;
     bool stateDone = false;
 
@@ -1304,13 +1315,14 @@ void Robot::Subsystem_AngleUpdate() {
           m_autoTimer.Reset();
           m_autoTimer.Start();
           m_initialAngle = m_imu.GetAngle();
+          m_startDistance = pose.X();
         }
         fmt::print( "state0\n" );
 
         if ( forwards )
         {
           speed = 1.0_mps;
-          dist  = 1.0_m;
+          dist  = 2.0_m;
         }
         else
         {
@@ -1330,13 +1342,39 @@ void Robot::Subsystem_AngleUpdate() {
           m_autoTimer.Reset();
           m_autoTimer.Start();
           m_initialAngle = m_imu.GetAngle();
+          m_currentAngle = m_imu.GetRoll();
+          m_prevAngle = m_currentAngle;
+          m_startDistance = pose.X();
         }
-        fmt::print( "state1\n" );
-        double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
-        pidValue = std::clamp( pidValue, -0.6, 0.6 );
-        m_robotDrive.ArcadeDrive(-pidValue, 0.0);
-
+        //fmt::print( "state1\n" );
+        //double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
+        //pidValue = std::clamp( pidValue, -0.6, 0.6 );
+        //m_robotDrive.ArcadeDrive(-pidValue, 0.0);
+        stateDone = Balance();
+        fmt::print( "BalanceDone\n" );
         //stateDone = DriveForDistance( -0.75, 2.0 );
+        break;
+      }
+
+
+      case 2:
+      {
+        if ( m_initState )
+        {
+          m_autoTimer.Stop();
+          m_autoTimer.Reset();
+          m_autoTimer.Start();
+          m_initialAngle = m_imu.GetAngle();
+          m_currentAngle = m_imu.GetRoll();
+          m_prevAngle = m_currentAngle;
+          m_startDistance = pose.X();
+        }
+        //fmt::print( "state1\n" );
+        //double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
+        //pidValue = std::clamp( pidValue, -0.6, 0.6 );
+        //m_robotDrive.ArcadeDrive(-pidValue, 0.0);
+        //stateDone = Balance();
+        stateDone = DriveForDistance( 1.5_mps, 0.15_m );
         break;
       }
 
@@ -1384,7 +1422,7 @@ void Robot::Subsystem_AngleUpdate() {
           m_initialAngle = m_imu.GetAngle();
         }
         fmt::print( "state0\n" );
-        stateDone = DriveForDistance( -1.0_mps, -3.5_m );
+        stateDone = DriveForDistance( -1.0_mps, -4.0_m, 8.0_s );
         break;
       }
 
@@ -1544,6 +1582,63 @@ void Robot::Subsystem_AngleUpdate() {
 
     return sequenceDone; 
   }
+
+
+
+
+
+
+
+
+bool Robot::Balance()
+{
+  bool balanced = false;
+  double angleChangeThreshold = 0.5;
+  m_currentAngle = m_imu.GetRoll();
+
+
+  if ( fabs(m_currentAngle) < 3.0  )
+  {
+    Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+    //balanced = true;
+  }
+  else
+  {
+    if ( m_currentAngle > 0.0 )
+    {
+      if ( ( m_prevAngle - m_currentAngle ) > angleChangeThreshold )
+      {
+        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        //balanced = true;
+      }
+      else
+      {
+        Drivetrain_Drive(1.0_mps, 0.0_rad_per_s);
+      }
+    }
+    else
+    {
+      if ( ( m_prevAngle - m_currentAngle ) < -angleChangeThreshold )
+      {
+        Drivetrain_Drive(0.0_mps, 0.0_rad_per_s);
+        //balanced = true;
+      }
+      else
+      {
+        Drivetrain_Drive(-1.0_mps, 0.0_rad_per_s);
+      }
+    }
+  }
+  frc::SmartDashboard::PutNumber("BALANCE_currentAngle", m_currentAngle);
+  frc::SmartDashboard::PutNumber("BALANCE_delta",    m_prevAngle - m_currentAngle);
+
+  m_prevAngle = m_currentAngle;
+  return balanced;
+}
+
+
+
+
 
 
 
