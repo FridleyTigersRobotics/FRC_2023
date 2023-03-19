@@ -41,7 +41,9 @@
 #include <frc/geometry/Pose2d.h>
 
 
-
+#define ANGLE_DEBUG ( 1 )
+#define LIFT_DEBUG  ( 1 )
+#define DRIVE_DEBUG ( 1 )
 
 class DualChannelAnalogEncoder {
   public:
@@ -319,7 +321,8 @@ class Robot : public frc::TimedRobot {
   double m_winchLiftSetpoint      { 0 };
   double m_rotateClawValue        { 0 };
 
-  static constexpr int kAngleEncoderTopValue{ -1300 };
+  static constexpr int kAngleEncoderTopSafetyValue{ -1500 };
+  static constexpr int kAngleEncoderTopValue      { -1300 };
 
   enum claw_state_e
   {
@@ -357,10 +360,10 @@ class Robot : public frc::TimedRobot {
   unsigned int m_autoState    { 0 }; 
   double       m_initialAngle { 0 };
 
-  double m_prevAngle          { 0 };
-  double m_currentAngle       { 0 };
-  int m_atRotateSetpointCount { 0 };
-
+  double m_prevAngle             { 0 };
+  double m_currentAngle          { 0 };
+  int m_atRotateSetpointCount    { 0 };
+  units::meter_t m_startDistance { 0 };
 
   // Other
   std::shared_ptr<nt::NetworkTable> limelightNetworkTable;
@@ -370,10 +373,8 @@ class Robot : public frc::TimedRobot {
 
   bool m_PrevManualWinchLiftControlEnabled { false };
   bool m_PrevManualAngleControlEnabled     { false };
+  bool m_reverseDrive                      { false };
 
-  bool m_reverseDrive { false };
-
-  units::meter_t m_startDistance;
 
 
 
@@ -405,6 +406,7 @@ class Robot : public frc::TimedRobot {
   bool RotateDegrees( double angle );
   bool DriveForDistance( units::meters_per_second_t speed, units::meter_t distance, units::time::second_t maxTime );
 
+
   void RobotInit() override {
     limelightNetworkTable = nt::NetworkTableInstance::GetDefault().GetTable("limelight");
     // We need to invert one side of the drivetrain so that positive voltages
@@ -431,10 +433,13 @@ class Robot : public frc::TimedRobot {
     m_balancePid.SetIntegratorRange( -0.4, 0.4 ); //stops integrator wind-up
   }
 
+
   void RobotPeriodic() override {
     m_angleEncoder.Update();
     m_clawEncoder.Update();
     frc::Pose2d pose = m_odometry.GetPose();
+
+  #if DRIVE_DEBUG
     frc::SmartDashboard::PutNumber("DRIVE_leftEncoderRaw",      m_leftEncoder.Get());   
     frc::SmartDashboard::PutNumber("DRIVE_rightEncoderRaw",     m_rightEncoder.Get());
     frc::SmartDashboard::PutNumber("DRIVE_LeftDistance",      m_leftEncoder.GetDistance());   
@@ -442,12 +447,12 @@ class Robot : public frc::TimedRobot {
     frc::SmartDashboard::PutNumber("IMU_ROLL",     m_imu.GetRoll());
     frc::SmartDashboard::PutNumber("POSE_X",     (double)pose.X());
     frc::SmartDashboard::PutNumber("POSE_Y",     (double)pose.Y());
+  #endif
   }
 
 
   void TestInit() override {
     m_angleEncoder.Reset();
-    m_clawEncoder.Update();
     m_leftEncoder.Reset();
     m_rightEncoder.Reset();
     m_balancePid.Reset();
@@ -512,7 +517,6 @@ class Robot : public frc::TimedRobot {
   void TeleopInit() override {
     m_angleEncoder.Reset();
     m_liftencoder.Reset();
-    m_clawEncoder.Update();
     m_leftEncoder.Reset();
     m_rightEncoder.Reset();
     m_balancePid.Reset();
@@ -1080,12 +1084,13 @@ void Robot::Subsystem_LiftUpdate() {
     liftMotorValue = -0.2;
   }
 
+#if LIFT_DEBUG
   frc::SmartDashboard::PutNumber("LIFT0_m_LiftHoldPid.GetSetpoint()",  m_LiftHoldPid.GetSetpoint());
   frc::SmartDashboard::PutNumber("LIFT1_WinchLiftEncoderValue",        WinchLiftEncoderValue);
   frc::SmartDashboard::PutNumber("LIFT2_m_winchLiftSetpoint",          m_winchLiftSetpoint  );
   frc::SmartDashboard::PutNumber("LIFT3_m_liftLimitTop.Get()",         m_liftLimitTop.Get()  );
   frc::SmartDashboard::PutNumber("LIFT4_liftMotorValue",               liftMotorValue  );
-
+#endif
 
   //fmt::print( "{},{},{},{},{}\n", m_LiftHoldPid.GetPositionError(), m_angleEncoder.GetValue(), m_winchLiftSetpoint, m_LiftHoldPid.GetSetpoint(), WinchLiftEncoderValue, liftMotorValue );
 
@@ -1113,7 +1118,6 @@ void Robot::Subsystem_LiftUpdate() {
 void Robot::Subsystem_AngleUpdate() {
   double linActRightValue = 0.0;
   double linActLeftValue  = 0.0;
-  int angleValue = -m_angleEncoder.GetValue();
   double motorVal = m_AngleHoldPid.Calculate( m_angleEncoder.GetValue() );
 
   linActLeftValue = motorVal;
@@ -1144,7 +1148,7 @@ void Robot::Subsystem_AngleUpdate() {
     m_AngleLimitsSet = true;
   }
 
-  if ( angleValue < -1500 || !m_angleTopLimit.Get() )
+  if ( m_angleEncoder.GetValue() < kAngleEncoderTopSafetyValue || !m_angleTopLimit.Get() )
   {
     linActRightValue = std::clamp( linActRightValue, 0.0, 1.0 );
     linActLeftValue  = std::clamp( linActLeftValue,  0.0, 1.0 );
@@ -1159,6 +1163,7 @@ void Robot::Subsystem_AngleUpdate() {
   m_LinActRight.Set( linActRightValue );
   m_LinActLeft.Set( linActLeftValue );
 
+#if ANGLE_DEBUG
   frc::SmartDashboard::PutNumber("ANGLE_angleSetpoint",                m_angleSetpoint);
   frc::SmartDashboard::PutNumber("ANGLE_motorVal",                     motorVal);
   frc::SmartDashboard::PutNumber("ANGLE_m_AngleHoldPid.GetSetpoint()", m_AngleHoldPid.GetSetpoint());
@@ -1168,6 +1173,7 @@ void Robot::Subsystem_AngleUpdate() {
   frc::SmartDashboard::PutNumber("ANGLE_m_bottomLimitLeft",            m_bottomLimitLeft.Get());
   frc::SmartDashboard::PutNumber("ANGLE_m_bottomLimitRight",           m_bottomLimitRight.Get());
   frc::SmartDashboard::PutNumber("ANGLE_m_angleTopLimit",              m_angleTopLimit.Get());
+#endif
 }
 
 
