@@ -347,8 +347,10 @@ class Robot : public frc::TimedRobot {
   // Autonomous
   const std::string kAutoNameDefault          { "DO NOTHING"           };
   const std::string kAutoDrive                { "Drive"                };
-  const std::string kAutoPlaceAndDrive        { "PlaceAndDrive"        };
+  const std::string kAutoBalance              { "Balance"              };
+  const std::string kAutoPlace                { "Place"                };
   const std::string kAutoDriveAndBalance      { "DriveAndBalance"      };
+  const std::string kAutoPlaceAndDrive        { "PlaceAndDrive"        };
   const std::string kAutoPlaceAndBalance      { "PlaceAndBalance"      };
   const std::string kAutoPlaceDriveAndBalance { "PlaceDriveAndBalance" };
 
@@ -402,6 +404,7 @@ class Robot : public frc::TimedRobot {
   bool RunBalanceAuto( bool forwards );
 
   // Auto functions
+  void NextAutoSequence();
   bool Balance();
   bool RotateDegrees( double angle );
   bool DriveForDistance( units::meters_per_second_t speed, units::meter_t distance, units::time::second_t maxTime );
@@ -418,11 +421,13 @@ class Robot : public frc::TimedRobot {
     m_rightEncoder.SetDistancePerPulse( kDistancePerPulse );
 
     // Autonomous Chooser
-    m_autoChooser.SetDefaultOption( kAutoNameDefault,     kAutoNameDefault   );
-    m_autoChooser.AddOption       ( kAutoDrive,           kAutoDrive         );
-    m_autoChooser.AddOption       ( kAutoPlaceAndDrive,   kAutoPlaceAndDrive );
-    m_autoChooser.AddOption       ( kAutoDriveAndBalance, kAutoDriveAndBalance );
-    m_autoChooser.AddOption       ( kAutoPlaceAndBalance, kAutoPlaceAndBalance );
+    m_autoChooser.SetDefaultOption( kAutoNameDefault,          kAutoNameDefault          );
+    m_autoChooser.AddOption       ( kAutoDrive,                kAutoDrive                );
+    m_autoChooser.AddOption       ( kAutoBalance,              kAutoBalance              );
+    m_autoChooser.AddOption       ( kAutoPlace,                kAutoPlace                );
+    m_autoChooser.AddOption       ( kAutoDriveAndBalance,      kAutoDriveAndBalance      );
+    m_autoChooser.AddOption       ( kAutoPlaceAndDrive,        kAutoPlaceAndDrive        );
+    m_autoChooser.AddOption       ( kAutoPlaceAndBalance,      kAutoPlaceAndBalance      );
     m_autoChooser.AddOption       ( kAutoPlaceDriveAndBalance, kAutoPlaceDriveAndBalance );
 
     frc::SmartDashboard::PutData("Auto Modes", &m_autoChooser);
@@ -628,6 +633,7 @@ class Robot : public frc::TimedRobot {
 
     double yVal = -m_DriveController.GetLeftY();
     double xVal = -m_DriveController.GetRightX();
+    // Limit to 0.6 rotation at driving speed.
     double rotationLimiter = std::clamp( 1.6 - fabs(yVal), 0.0, 1.0 );
     double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( yVal );
     double zRotation = m_DriveRotationAccelerationLimiter.Set( xVal * rotationLimiter );
@@ -741,7 +747,6 @@ class Robot : public frc::TimedRobot {
   }
 
 
-
   void AutonomousPeriodic() override {
     Drivetrain_UpdateOdometry();
 
@@ -749,62 +754,72 @@ class Robot : public frc::TimedRobot {
     {
       RunDriveAuto( );
     }
+    else if (m_autoSelected == kAutoBalance) 
+    {
+      RunBalanceAuto( false );
+    }
+    else if (m_autoSelected == kAutoPlace) 
+    {
+      RunPlaceAuto( );
+    }
+    else if (m_autoSelected == kAutoDriveAndBalance)
+    {
+      if ( m_autoSequence == 0 )
+      {
+        if ( RunDriveAuto( ) == true )
+        {
+          NextAutoSequence();
+        }
+      }
+      else if ( m_autoSequence == 1 )
+      {
+        if ( RunBalanceAuto( true ) == true )
+        {
+          NextAutoSequence();
+        }
+      }
+      else
+      {
+        Drivetrain_Stop();
+      }
+    }
     else if (m_autoSelected == kAutoPlaceAndDrive)
     {
       if ( m_autoSequence == 0 )
       {
         if ( RunPlaceAuto( ) == true )
         {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
+          NextAutoSequence();
         }
       }
-      /*else if ( m_autoSequence == 1 )
+      else if ( m_autoSequence == 1 )
       {
         if ( RunDriveAuto( ) == true )
         {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
+          NextAutoSequence();
         }
-      }*/
+      }
       else
       {
         Drivetrain_Stop();
       }
     }
-    else if (m_autoSelected == kAutoDriveAndBalance)
-    {
-      RunBalanceAuto( false );
-    }
     else if (m_autoSelected == kAutoPlaceAndBalance)
     {
       if ( m_autoSequence == 0 )
       {
-        if ( RunBalanceAuto( false ) == true )
+        if ( RunPlaceAuto( ) == true )
         {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
+          NextAutoSequence();
         }
-
-        /*if ( RunPlaceAuto( ) == true )
-        {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
-        }*/
       }
-      /*else if ( m_autoSequence == 1 )
+      else if ( m_autoSequence == 1 )
       {
         if ( RunBalanceAuto( false ) == true )
         {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
+          NextAutoSequence();
         }
-      }*/
+      }
       else
       {
         Drivetrain_Stop();
@@ -816,27 +831,21 @@ class Robot : public frc::TimedRobot {
       {
         if ( RunPlaceAuto( ) == true )
         {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
+          NextAutoSequence();
         }
       }
       else if ( m_autoSequence == 1 )
       {
         if ( RunDriveAuto( ) == true )
         {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
+          NextAutoSequence();
         }
       }
       else if ( m_autoSequence == 2 )
       {
         if ( RunBalanceAuto( true ) == true )
         {
-          m_autoSequence++;
-          m_autoState = 0;
-          m_initState = true;
+          NextAutoSequence();
         }
       }
       else
@@ -856,10 +865,16 @@ class Robot : public frc::TimedRobot {
     Subsystem_AngleUpdate();
     Subsystem_LiftUpdate();
     Subsystem_ClawUpdate();
-
   }
 };
 
+
+void Robot::NextAutoSequence()
+{
+  m_autoSequence++;
+  m_autoState = 0;
+  m_initState = true;
+}
 
 
 void Robot::SetLiftSetpoints(
@@ -934,7 +949,7 @@ void Robot::Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds
       m_leftEncoder.GetRate(), speeds.left.value());
   const double rightOutput = m_rightPIDController.Calculate(
       m_rightEncoder.GetRate(), speeds.right.value());
-
+#if DRIVE_DEBUG
   frc::SmartDashboard::PutNumber("DRIVE_leftRate", m_leftEncoder.GetRate()  );
   frc::SmartDashboard::PutNumber("DRIVE_leftSpeed", speeds.left.value()  );
   frc::SmartDashboard::PutNumber("DRIVE_rightRate", m_rightEncoder.GetRate()  );
@@ -943,7 +958,7 @@ void Robot::Drivetrain_SetSpeeds(const frc::DifferentialDriveWheelSpeeds& speeds
   frc::SmartDashboard::PutNumber("DRIVE_leftFeedforward", (double)leftFeedforward  );
   frc::SmartDashboard::PutNumber("DRIVE_rightOutput", rightOutput  );
   frc::SmartDashboard::PutNumber("DRIVE_rightFeedforward", (double)rightFeedforward  );
-
+#endif
   m_leftMotors.SetVoltage(units::volt_t{leftOutput} + leftFeedforward);
   m_rightMotors.SetVoltage(units::volt_t{rightOutput} + rightFeedforward);
   m_robotDrive.FeedWatchdog();
@@ -1333,11 +1348,13 @@ void Robot::Subsystem_AngleUpdate() {
           m_initialAngle = m_imu.GetAngle();
         }
         SetLiftSetpoints( LIFT_POSITION_HIGH_GOAL_AUTONOMOUS );
-        stateDone = ( m_autoTimer.Get() > (units::time::second_t)3.0 ) || m_liftLimitTop.Get() || (m_LiftHoldPid.AtSetpoint() && m_LiftHoldPid.GetSetpoint() > 1000);
+        stateDone =
+          m_liftLimitTop.Get() ||
+          ( m_autoTimer.Get() > (units::time::second_t)3.0 ) ||
+          ( m_LiftHoldPid.AtSetpoint() && ( m_LiftHoldPid.GetSetpoint() > 1000 ) );
         Drivetrain_Stop();
         break;
       }
-
 
       case 1:
       {
