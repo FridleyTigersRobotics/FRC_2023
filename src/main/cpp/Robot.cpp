@@ -568,6 +568,8 @@ class Robot : public frc::TimedRobot {
     bool SelfBalanceEnable  = false;//m_DriveController.GetYButton();
     bool SwapDriveDirection = m_DriveController.GetYButtonPressed();
     bool ToggleClaw         = m_DriveController.GetXButtonPressed();
+    bool AimAtConeNode      = m_DriveController.GetAButton();
+    bool AimAtConeNodeStart = m_DriveController.GetAButtonPressed();
 
     // Maunal Winch Lift Control
     bool ManualWinchLiftUp              = m_DriveController.GetRightBumper() || m_AuxController.GetRightBumper();
@@ -624,87 +626,31 @@ class Robot : public frc::TimedRobot {
     // ------------------------------------------------------------------------
     Drivetrain_UpdateOdometry();
 
-    if ( SelfBalanceEnable )
+    double yVal = -m_DriveController.GetLeftY();
+    double xVal = -m_DriveController.GetRightX();
+    double rotationLimiter = std::clamp( 1.6 - fabs(yVal), 0.0, 1.0 );
+    double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( yVal );
+    double zRotation = m_DriveRotationAccelerationLimiter.Set( xVal * rotationLimiter );
+
+    if ( m_reverseDrive )
     {
-      double pidValue = m_balancePid.Calculate( m_imu.GetRoll() );
-      m_robotDrive.ArcadeDrive(-pidValue, 0.0);
-      m_DriveSpeedAccelerationLimiter.Reset();
-      m_DriveRotationAccelerationLimiter.Reset();
+      xSpeed *= -1.0;
+    }
+
+    if ( AimAtConeNode )
+    {
+      if ( AimAtConeNodeStart )
+      {
+        m_rotateLimePid.Reset();
+      }
+      double rotationSpeed = m_rotateLimePid.Calculate( limelightNetworkTable->GetNumber( "tx", 0.0 ) );
+
+      Drivetrain_Drive( units::meters_per_second_t { xSpeed * 2.0 }, 
+                        units::radians_per_second_t{ rotationSpeed } );
     }
     else
     {
-      if ( false )
-      {
-        double yVal = m_DriveController.GetLeftY();
-        double xVal = m_DriveController.GetRightX();
-
-        if ( fabs(yVal) < 0.2 )
-        {
-          yVal = 0.0;
-        }
-        else
-        {
-          if ( yVal > 0.0 )
-          {
-            yVal = ( yVal - 0.2 ) * 1.2;
-            yVal = yVal * yVal;
-          }
-          else
-          {
-            yVal = ( yVal + 0.2 ) * 1.2;
-            yVal = -yVal * yVal;
-          }
-        }
-
-        if ( fabs(xVal) < 0.2 )
-        {
-          xVal = 0.0;
-        }
-        else
-        {
-           //double rotationSlowPercent = fabs( m_DriveController.GetLeftY() );
-
-          if ( xVal > 0.0 )
-          {
-            
-
-            xVal = ( xVal - 0.2 ) * 1.8;
-            xVal = xVal * xVal;
-          }
-          else
-          {
-            xVal = ( xVal + 0.2 ) * 1.8;
-            xVal = -xVal * xVal;
-          }
-        }
-
-        auto xSpeed = -m_speedLimiter.Calculate(yVal) * kMaxSpeed;
-        auto rot    = -m_rotLimiter.Calculate(xVal) * kMaxAngularSpeed;
-
-        frc::SmartDashboard::PutNumber("DRIVE_xSpeed", (double)xSpeed  );
-        frc::SmartDashboard::PutNumber("DRIVE_rot", (double)rot  );
-
-        Drivetrain_Drive( xSpeed, rot );
-      }
-      else
-      {
-        double yVal = -m_DriveController.GetLeftY();
-        double xVal = -m_DriveController.GetRightX();
-        double rotationLimiter = std::clamp( 1.6 - fabs(yVal), 0.0, 1.0 );
-        xVal *= rotationLimiter;
-
-        double xSpeed    = m_DriveSpeedAccelerationLimiter.Set( yVal );
-        double zRotation = m_DriveRotationAccelerationLimiter.Set( xVal );
-
-        frc::SmartDashboard::PutNumber("DRIVE_xSpeed", (double)xSpeed  );
-        frc::SmartDashboard::PutNumber("DRIVE_rot", (double)zRotation  );
-
-        if ( m_reverseDrive )
-        {
-          xSpeed *= -1.0;
-        }
-        m_robotDrive.ArcadeDrive( xSpeed, zRotation );
-      }
+      m_robotDrive.ArcadeDrive( xSpeed, zRotation );
     }
 
 
